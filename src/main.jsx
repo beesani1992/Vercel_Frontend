@@ -1,10 +1,11 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+// frontend/src/main.jsx (or index.js)
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import AppWrapper from './AppWrapper.jsx' // <--- Changed from './App.jsx'
+import './index.css' // Your existing CSS file if you have one
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <AppWrapper /> {/* <--- Render AppWrapper here */}
+  </React.StrictMode>
 )
