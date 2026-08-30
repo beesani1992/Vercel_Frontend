@@ -14,7 +14,7 @@ export default function AppWrapper() {
     if (!token) return;
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/credits', {
+      const res = await fetch('https://vercel-backend-two-umber.vercel.app/api/auth/credits', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -36,7 +36,7 @@ export default function AppWrapper() {
 
   const handleUseCredit = async (amount = 1) => {
     const token = localStorage.getItem('token');
-    const res = await fetch('http://localhost:5000/api/auth/use-credit', {
+    const res = await fetch('https://vercel-backend-two-umber.vercel.app/api/auth/use-credit', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

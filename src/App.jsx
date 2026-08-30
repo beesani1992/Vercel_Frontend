@@ -52,7 +52,7 @@ function App({ credits, useCredit }) {
     setLoadingState({ active: true, message: 'Uploading video to Gemini engine...' });
 
     try {
-      const response = await fetch('http://localhost:5000/api/process-video', {
+      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/process-video', {
         method: 'POST',
         body: payload,
       });

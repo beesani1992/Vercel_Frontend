@@ -18,7 +18,7 @@ export default function AuthPage({ onLoginSuccess }) {
     const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
 
     try {
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(`https://vercel-backend-two-umber.vercel.app/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -46,7 +46,7 @@ export default function AuthPage({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/verify-otp', {
+      const res = await fetch('https://vercel-backend-two-umber.vercel.app/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp }),
