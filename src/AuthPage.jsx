@@ -18,7 +18,7 @@ export default function AuthPage({ onLoginSuccess }) {
     const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
 
     try {
-      const res = await fetch(`https://vercel-backend-two-umber.vercel.app/${endpoint}`, {
+      const res = await fetch(`https://vercel-backend-two-umber.vercel.app${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
