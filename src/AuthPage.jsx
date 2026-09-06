@@ -70,6 +70,13 @@ export default function AuthPage({ onLoginSuccess }) {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
+        {/* APP BRANDING & TITLE */}
+        <div style={headerStyle}>
+          <h1 style={brandTitleStyle}>Video-To-Script</h1>
+          <p style={subtitleStyle}>
+            {isRegister ? 'Sign up & get 70 free credits' : 'Access your creative workspace'}
+          </p>
+        </div>
         {!showOtpScreen ? (
           /* LOGIN / REGISTER FORM */
           <form onSubmit={handleSubmit}>
@@ -130,6 +137,12 @@ export default function AuthPage({ onLoginSuccess }) {
             </button>
           </form>
         )}
+        {/* COPYRIGHT FOOTER */}
+        <footer style={copyrightStyle}>
+          <p style={{ margin: 0 }}>
+            &copy; {new Date().getFullYear()} B.K Beesani@2026. All rights reserved.
+          </p>
+        </footer>
       </div>
     </div>
   );
@@ -138,5 +151,9 @@ export default function AuthPage({ onLoginSuccess }) {
 // Inline Styles
 const containerStyle = { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0a0a0a' };
 const cardStyle = { background: '#111', padding: '30px', borderRadius: '12px', border: '1px solid rgba(0,243,255,0.3)', width: '350px' };
+const headerStyle = { textAlign: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' };
+const brandTitleStyle = { color: '#fff', fontSize: '1.8rem', margin: '0 0 5px 0', letterSpacing: '1px', fontWeight: 'bold' };
+const subtitleStyle = { color: '#888', fontSize: '0.85rem', margin: 0 };
 const inputStyle = { width: '100%', padding: '12px', margin: '10px 0', background: '#222', border: '1px solid #333', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' };
 const btnStyle = { width: '100%', padding: '12px', background: '#00f3ff', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' };
+const copyrightStyle = { marginTop: '25px', paddingTop: '15px', borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center', color: '#555', fontSize: '0.75rem' };
