@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CopyScriptButton from './components/CopyScriptButton';
 
 // Accept credits and useCredit props passed down from AppWrapper
 function App({ credits, useCredit }) {
@@ -117,7 +118,13 @@ function App({ credits, useCredit }) {
 
         {/* Right Column: Cartoon Blueprint Output */}
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Step-2. Target Script Generation</h2>
+          {/* Header flexbox containing Title and Copy Component */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #F3F4F6', paddingBottom: '10px' }}>
+            <h2 style={{ ...styles.cardTitle, borderBottom: 'none', paddingBottom: 0, margin: 0 }}>Step-2. Target Script Generation</h2>
+            
+            {/* COPY BUTTON COMPONENT */}
+            <CopyScriptButton textToCopy={cartoonData} />
+          </div>
           {cartoonData ? (
             <div style={styles.outputBox}>
               <pre style={styles.preformattedText}>{cartoonData}</pre>
