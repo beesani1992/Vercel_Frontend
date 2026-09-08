@@ -6,7 +6,7 @@ export default function Profile({ credits }) {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    fetch('http://localhost:5000/api/auth/profile', {
+    fetch('https://vercel-backend-two-umber.vercel.app/api/auth/profile', {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then((res) => res.json())
