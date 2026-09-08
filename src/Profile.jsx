@@ -24,7 +24,7 @@ export default function Profile({ credits }) {
           <p><strong>Username:</strong> {user.username}</p>
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Available Credits:</strong> <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>⚡ {credits ?? user.credits}</span></p>
-          <p><strong>Joined:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
+          <p><strong>Joined:</strong> {new Date(users.created_at).toLocaleDateString()}</p>
         </div>
       </div>
     </div>
