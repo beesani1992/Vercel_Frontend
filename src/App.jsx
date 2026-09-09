@@ -10,7 +10,7 @@ function App({ credits, useCredit, userId }) {
   const [loadingState, setLoadingState] = useState({ active: false, message: '' });
   const [cartoonData, setCartoonData] = useState('');
 
-  // 2. PAYMENT MODAL STATE
+  // PAYMENT MODAL STATE
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
 
@@ -86,15 +86,22 @@ function App({ credits, useCredit, userId }) {
       setLoadingState({ active: false, message: '' });
     }
   };
-  
+
   return (
     <div style={styles.appContainer}>
       <header style={styles.header}>
         <h1 style={styles.title}>✨ Video-to-Script</h1>
         <p style={styles.subtitle}>Powered by Google Gemini</p>
+        
         {/* TOP BAR CREDIT COUNTER & BUY CREDITS BUTTONS */}
         <div style={styles.creditsBar}>
-          <p style={styles.creditText}>💳 Available Credits: <strong>{credits ?? 0}</strong></p>
+          <div style={styles.creditInfoBox}>
+            <span style={{ fontSize: '1.2rem' }}>💳</span>
+            <span style={styles.creditText}>
+              Available Credits: <strong style={{ color: '#4F46E5', fontSize: '1.2rem' }}>{credits ?? 0}</strong>
+            </span>
+          </div>
+
           <div style={styles.pkgButtonGroup}>
             {creditPackages.map((pkg) => (
               <button
@@ -102,7 +109,8 @@ function App({ credits, useCredit, userId }) {
                 onClick={() => handleOpenPayment(pkg)}
                 style={styles.paymentDetailsBtn}
               >
-                📝 Submit Payment Details (${pkg.price} for {pkg.credits} C)
+                📝 Submit Payment Details
+                <span style={styles.priceTag}>${pkg.price} for {pkg.credits} C</span>
               </button>
             ))}
           </div>
@@ -124,7 +132,7 @@ function App({ credits, useCredit, userId }) {
               <video 
                 src={videoPreview} 
                 controls 
-                onLoadedMetadata={handleLoadedMetadata} // Reads duration when video loads
+                onLoadedMetadata={handleLoadedMetadata}
                 style={styles.videoPlayer} 
               />
               {videoDuration > 0 && (
@@ -166,7 +174,8 @@ function App({ credits, useCredit, userId }) {
           )}
         </section>
       </main>
-      {/* 3. MODAL COMPONENT */}
+
+      {/* MODAL COMPONENT */}
       <PaymentDetailsModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
@@ -177,16 +186,18 @@ function App({ credits, useCredit, userId }) {
   );
 }
 
-// Minimalist Dashboard Styling Rules
+// Fixed Dashboard Styling Rules
 const styles = {
   appContainer: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px', fontFamily: '"Inter", sans-serif', color: '#1F2937' },
-  header: { textAlign: 'center', marginBottom: '40px' },
+  header: { textAlign: 'center', marginBottom: '32px' },
   title: { fontSize: '2.5rem', fontWeight: '800', color: '#4F46E5', margin: '0 0 8px 0' },
-  subtitle: { fontSize: '1.1rem', color: '#6B7280', margin: 0 },
-  creditsBar: { background: '#F3F4F6', padding: '16px 20px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
-  creditText: { margin: 0, fontSize: '1.1rem', color: '#1F2937' },
-  pkgButtonGroup: { display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' },
-  paymentDetailsBtn: { padding: '8px 14px', background: '#4F46E5', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' },
+  subtitle: { fontSize: '1.1rem', color: '#6B7280', margin: '0 0 24px 0' },
+  creditsBar: { background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px 24px', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+  creditInfoBox: { display: 'flex', alignItems: 'center', gap: '8px' },
+  creditText: { margin: 0, fontSize: '1rem', color: '#334155', fontWeight: '500' },
+  pkgButtonGroup: { display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' },
+  paymentDetailsBtn: { padding: '10px 16px', background: '#4F46E5', color: '#FFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)', transition: 'transform 0.1s ease' },
+  priceTag: { background: 'rgba(255, 255, 255, 0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700' },
   mainGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', alignItems: 'start' },
   card: { background: '#FFFFFF', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
   cardTitle: { fontSize: '1.3rem', fontWeight: '700', marginBottom: '20px', borderBottom: '2px solid #F3F4F6', paddingBottom: '10px' },
