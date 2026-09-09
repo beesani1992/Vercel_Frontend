@@ -54,20 +54,10 @@ function App({ credits, useCredit, userId }) {
       );
     }
 
-    // 3. Deduct credits via API
-    setLoadingState({ active: true, message: `Deducting ${requiredCredits} credits...` });
-    const success = await useCredit(requiredCredits);
-
-    if (!success) {
-      setLoadingState({ active: false, message: '' });
-      return; // Stop if deduction failed
-    }
-
-    // 4. Continue with original pipeline logic
     const payload = new FormData();
     payload.append('video', videoFile);
 
-    setLoadingState({ active: true, message: 'Uploading video to Gemini engine...' });
+    setLoadingState({ active: true, message: 'Uploading video & generating script via Gemini engine...' });
 
     try {
       const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/process-video', {
@@ -78,8 +68,16 @@ function App({ credits, useCredit, userId }) {
       const data = await response.json();
 
       if (data.success) {
-        setLoadingState({ active: false, message: '' });
+        setLoadingState({ active: true, message: `Script generated! Finalizing deduction of ${requiredCredits} credits...` });
+        
+        const success = await useCredit(requiredCredits);
+
+        if (!success) {
+          throw new Error('Credit deduction failed. Please contact support.');
+        }
+
         setCartoonData(data.cartoonBlueprint);
+        setLoadingState({ active: false, message: '' });
       } else {
         throw new Error(data.error || 'Pipeline breakdown.');
       }
@@ -88,7 +86,7 @@ function App({ credits, useCredit, userId }) {
       setLoadingState({ active: false, message: '' });
     }
   };
-
+  
   return (
     <div style={styles.appContainer}>
       <header style={styles.header}>
