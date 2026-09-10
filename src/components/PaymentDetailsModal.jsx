@@ -15,6 +15,11 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
     e.preventDefault();
     setErrorMsg('');
 
+    // 1. Verify userId exists before sending query
+  if (!userId) {
+    return setErrorMsg('User session expired. Please log in again.');
+  }
+
     if (!senderAccount || !transactionId) {
       return setErrorMsg('Please complete all fields.');
     }
