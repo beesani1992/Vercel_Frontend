@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, userId }) {
+export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage }) {
   const [paymentMethod, setPaymentMethod] = useState('Payoneer');
   const [senderAccount, setSenderAccount] = useState('');
   const [transactionId, setTransactionId] = useState('');
@@ -15,35 +15,45 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
     e.preventDefault();
     setErrorMsg('');
 
-    // 1. Verify userId exists before sending query
-  if (!userId) {
-    return setErrorMsg('User session expired. Please log in again.');
-  }
-
-    if (!senderAccount || !transactionId) {
-      return setErrorMsg('Please complete all fields.');
+    if (!senderAccount.trim() || !transactionId.trim()) {
+      return setErrorMsg('Please fill out all fields.');
     }
 
     setLoading(true);
 
     try {
-      // Direct Insert into Supabase manual_payments table
+      // 1. Fetch the active user session directly from Supabase Client
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.user) {
+        throw new Error('Authentication session required. Please log in again.');
+      }
+
+      const activeUserId = session.user.id;
+      const activeUserEmail = session.user.email;
+
+      // 2. Insert using the authenticated user's ID to satisfy RLS
       const { error } = await supabase
         .from('manual_payments')
         .insert([
           {
-            user_id: userId,
-            package_id: selectedPackage?.id,
-            amount_usd: selectedPackage?.price,
-            credits: selectedPackage?.credits,
+            user_id: activeUserId, // Must match auth.uid() for RLS to succeed
+            user_email: activeUserEmail,
+            package_id: selectedPackage?.id || null,
+            amount_usd: selectedPackage?.price || 0,
+            credits: selectedPackage?.credits || 0,
             payment_method: paymentMethod,
             sender_account: senderAccount.trim(),
             transaction_id: transactionId.trim(),
-            status: 'pending' // Explicit status assignment
+            status: 'pending'
           }
         ]);
 
       if (error) {
+        // 42501 = RLS policy violation (userId mismatch / permission denied)
+        if (error.code === '42501') {
+          throw new Error('Permission denied: Account ID mismatch or unauthorized session.');
+        }
         if (error.code === '23505') {
           throw new Error('This Transaction ID has already been submitted.');
         }
@@ -70,7 +80,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <h3 style={styles.title}>Payment Details Form</h3>
+          <h3 style={styles.title}>Submit Payment Details</h3>
           <button onClick={handleClose} style={styles.closeBtn}>✕</button>
         </div>
 
@@ -79,10 +89,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             <p style={{ fontSize: '2rem', margin: '0 0 10px 0' }}>⏳</p>
             <h4 style={{ color: '#10B981', margin: '0 0 10px 0' }}>Submitted for Verification!</h4>
             <p style={{ color: '#D1D5DB', fontSize: '0.9rem', lineHeight: '1.5' }}>
-              Your payment of <strong>${selectedPackage?.price} USD</strong> ({selectedPackage?.credits} Credits) has been saved with status <span style={styles.pendingBadge}>PENDING</span>.
-            </p>
-            <p style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>
-              Credits will be added automatically once approved by the admin.
+              Your payment request of <strong>${selectedPackage?.price} USD</strong> ({selectedPackage?.credits} Credits) has been submitted.
             </p>
             <button onClick={handleClose} style={styles.submitBtn}>Close</button>
           </div>
@@ -110,7 +117,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             </div>
 
             <div style={styles.field}>
-              <label style={styles.label}>Sender Account / Email / Mobile No:</label>
+              <label style={styles.label}>Sender Account / Mobile No:</label>
               <input
                 type="text"
                 placeholder="e.g. sender@email.com or 03001234567"
@@ -122,7 +129,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             </div>
 
             <div style={styles.field}>
-              <label style={styles.label}>Transaction ID / Ref Number (TID):</label>
+              <label style={styles.label}>Transaction ID / TID:</label>
               <input
                 type="text"
                 placeholder="e.g. 1029384756"
@@ -134,7 +141,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             </div>
 
             <button type="submit" disabled={loading} style={styles.submitBtn}>
-              {loading ? 'Saving to Database...' : 'Submit Payment Details'}
+              {loading ? 'Submitting...' : 'Submit Payment Details'}
             </button>
           </form>
         )}
@@ -155,6 +162,5 @@ const styles = {
   input: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #374151', background: '#1F2937', color: '#FFF', fontSize: '0.95rem', boxSizing: 'border-box' },
   submitBtn: { width: '100%', padding: '12px', background: '#4F46E5', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
   errorBox: { background: '#7F1D1D', color: '#FCA5A5', padding: '10px', borderRadius: '6px', marginBottom: '14px', fontSize: '0.85rem' },
-  successContainer: { textAlign: 'center', padding: '10px 0' },
-  pendingBadge: { background: '#FEF3C7', color: '#D97706', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8rem' }
+  successContainer: { textAlign: 'center', padding: '10px 0' }
 };
