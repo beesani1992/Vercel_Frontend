@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-// Helper function to decode JWT payload without external packages
+// Helper function to decode JWT payload safely
 const parseJwt = (token) => {
   try {
     const base64Url = token.split('.')[1];
@@ -14,14 +14,15 @@ const parseJwt = (token) => {
     );
     return JSON.parse(jsonPayload);
   } catch (err) {
-    console.error('Failed to decode JWT token:', err);
     return null;
   }
 };
 
-
 export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, userId }) {
+  // 1. CRITICAL FIX: Declare activeUserId state
   const [userEmail, setUserEmail] = useState('');
+  const [activeUserId, setActiveUserId] = useState(userId || ''); 
+  
   const [amount, setAmount] = useState('');
   const [creditsRequested, setCreditsRequested] = useState('');
   const [transactionId, setTransactionId] = useState('');
@@ -30,7 +31,6 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
 
   useEffect(() => {
     if (isOpen) {
-      // 1. Pre-fill package details
       if (selectedPackage) {
         setAmount(selectedPackage.price || '');
         setCreditsRequested(selectedPackage.credits || '');
@@ -39,7 +39,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
       let detectedEmail = '';
       let detectedId = userId || '';
 
-      // 2. Check localStorage 'user' object
+      // Check localStorage 'user' object
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         try {
@@ -51,13 +51,13 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
         }
       }
 
-      // 3. Fallback: Parse stored JWT token if email is still missing
-      if (!detectedEmail) {
+      // Fallback: Check JWT token in localStorage
+      if (!detectedEmail || !detectedId) {
         const token = localStorage.getItem('token');
         if (token) {
           const decoded = parseJwt(token);
           if (decoded) {
-            detectedEmail = decoded.email || decoded.user_email || decoded.sub || '';
+            if (!detectedEmail) detectedEmail = decoded.email || decoded.user_email || decoded.sub || '';
             if (!detectedId) detectedId = decoded.id || decoded.userId || decoded.sub || '';
           }
         }
@@ -75,7 +75,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
 
     const token = localStorage.getItem('token');
 
-    // Allow submit if email/id exists OR if a valid token is present
+    // Safe check using activeUserId
     if (!userEmail && !activeUserId && !token) {
       alert('Active user session not found. Please log in again.');
       return;
@@ -88,30 +88,35 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || ''}`,
+          'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           userId: activeUserId || null,
           email: userEmail || null,
           packageId: selectedPackage?.id || 'custom',
-          amount: parseFloat(amount),
-          creditsRequested: parseInt(creditsRequested, 10),
-          transactionId: transactionId.trim(),
-          paymentMethod,
+          amount: parseFloat(amount) || 0,
+          creditsRequested: parseInt(creditsRequested, 10) || 0,
+          transactionId: (transactionId || '').trim(),
+          paymentMethod: paymentMethod || 'bank_transfer',
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
 
-      if (response.ok && data.success) {
+      if (response.ok && data?.success) {
         alert(data.message || 'Payment submitted successfully!');
         setTransactionId('');
-        onClose();
+        if (typeof onClose === 'function') onClose();
       } else {
-        alert(data.message || 'Payment submission failed.');
+        alert(data?.message || 'Submission failed.');
       }
     } catch (err) {
-      alert(`Network Error: ${err.message}`);
+      alert(`Error submitting payment: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -134,7 +139,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
         )}
 
         <p style={styles.userInfoText}>
-          Account: <strong style={{ color: '#1F2937' }}>{userEmail || activeUserId || 'Authenticated Session'}</strong>
+          Account: <strong style={{ color: '#1F2937' }}>{userEmail || activeUserId || 'Authenticated User'}</strong>
         </p>
 
         <form onSubmit={handleSubmit}>
