@@ -1,166 +1,112 @@
-import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+// src/components/AuthenticatedPaymentForm.jsx
+import React, { useState, useEffect } from 'react';
 
-export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage }) {
-  const [paymentMethod, setPaymentMethod] = useState('Payoneer');
-  const [senderAccount, setSenderAccount] = useState('');
+export default function AuthenticatedPaymentForm() {
+  const [userEmail, setUserEmail] = useState('');
+  const [amount, setAmount] = useState('');
   const [transactionId, setTransactionId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [success, setSuccess] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    // Read session email saved in localStorage upon login
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        if (parsed.email) setUserEmail(parsed.email);
+      } catch (err) {
+        console.error('Failed to parse user session:', err);
+      }
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMsg('');
-
-    if (!senderAccount.trim() || !transactionId.trim()) {
-      return setErrorMsg('Please fill out all fields.');
+    if (!userEmail) {
+      alert('User session Expired. Please log in again.');
+      return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Fetch the active user session directly from Supabase Client
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          amount,
+          transactionId,
+          paymentMethod
+        })
+      });
 
-      if (sessionError || !session?.user) {
-        throw new Error('Authentication session required. Please log in again.');
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(data.message);
+        setAmount('');
+        setTransactionId('');
+      } else {
+        alert(data.message || 'Payment submission failed.');
       }
-
-      const activeUserId = session.user.id;
-      const activeUserEmail = session.user.email;
-
-      // 2. Insert using the authenticated user's ID to satisfy RLS
-      const { error } = await supabase
-        .from('manual_payments')
-        .insert([
-          {
-            user_id: activeUserId, // Must match auth.uid() for RLS to succeed
-            user_email: activeUserEmail,
-            package_id: selectedPackage?.id || null,
-            amount_usd: selectedPackage?.price || 0,
-            credits: selectedPackage?.credits || 0,
-            payment_method: paymentMethod,
-            sender_account: senderAccount.trim(),
-            transaction_id: transactionId.trim(),
-            status: 'pending'
-          }
-        ]);
-
-      if (error) {
-        // 42501 = RLS policy violation (userId mismatch / permission denied)
-        if (error.code === '42501') {
-          throw new Error('Permission denied: Account ID mismatch or unauthorized session.');
-        }
-        if (error.code === '23505') {
-          throw new Error('This Transaction ID has already been submitted.');
-        }
-        throw new Error(error.message);
-      }
-
-      setSuccess(true);
     } catch (err) {
-      setErrorMsg(err.message);
+      alert(`Network Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClose = () => {
-    setSuccess(false);
-    setSenderAccount('');
-    setTransactionId('');
-    setErrorMsg('');
-    onClose();
-  };
-
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
-        <div style={styles.header}>
-          <h3 style={styles.title}>Submit Payment Details</h3>
-          <button onClick={handleClose} style={styles.closeBtn}>✕</button>
-        </div>
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <h2 style={{ color: '#00f3ff', textAlign: 'center', marginBottom: '8px' }}>Submit Manual Payment</h2>
+        <p style={{ color: '#aaa', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' }}>
+          Logged in as: <strong style={{ color: '#fff' }}>{userEmail || 'Loading session...'}</strong>
+        </p>
 
-        {success ? (
-          <div style={styles.successContainer}>
-            <p style={{ fontSize: '2rem', margin: '0 0 10px 0' }}>⏳</p>
-            <h4 style={{ color: '#10B981', margin: '0 0 10px 0' }}>Submitted for Verification!</h4>
-            <p style={{ color: '#D1D5DB', fontSize: '0.9rem', lineHeight: '1.5' }}>
-              Your payment request of <strong>${selectedPackage?.price} USD</strong> ({selectedPackage?.credits} Credits) has been submitted.
-            </p>
-            <button onClick={handleClose} style={styles.submitBtn}>Close</button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div style={styles.pkgSummary}>
-              <span>Package: <strong>{selectedPackage?.credits} Credits</strong></span>
-              <span style={{ color: '#38BDF8', fontWeight: 'bold' }}>${selectedPackage?.price} USD</span>
-            </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Amount Paid ($)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            placeholder="Transaction ID / Reference ID"
+            value={transactionId}
+            onChange={(e) => setTransactionId(e.target.value)}
+            required
+            style={inputStyle}
+          />
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="easypaisa">EasyPaisa</option>
+            <option value="crypto">Binance</option>
+          </select>
 
-            {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
-
-            <div style={styles.field}>
-              <label style={styles.label}>Payment Method Used:</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                style={styles.input}
-              >
-                <option value="Payoneer">Payoneer Receiving Account</option>
-                <option value="JazzCash">JazzCash</option>
-                <option value="EasyPaisa">EasyPaisa</option>
-                <option value="BankTransfer">Direct Bank Transfer</option>
-              </select>
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>Sender Account / Mobile No:</label>
-              <input
-                type="text"
-                placeholder="e.g. sender@email.com or 03001234567"
-                value={senderAccount}
-                onChange={(e) => setSenderAccount(e.target.value)}
-                required
-                style={styles.input}
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>Transaction ID / TID:</label>
-              <input
-                type="text"
-                placeholder="e.g. 1029384756"
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                required
-                style={styles.input}
-              />
-            </div>
-
-            <button type="submit" disabled={loading} style={styles.submitBtn}>
-              {loading ? 'Submitting...' : 'Submit Payment Details'}
-            </button>
-          </form>
-        )}
+          <button type="submit" disabled={loading || !userEmail} style={btnStyle}>
+            {loading ? 'Submitting...' : 'Confirm Payment'}
+          </button>
+        </form>
       </div>
     </div>
   );
 }
 
-const styles = {
-  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { background: '#111827', color: '#FFF', padding: '24px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', fontFamily: 'sans-serif' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
-  title: { margin: 0, fontSize: '1.25rem', color: '#FFF' },
-  closeBtn: { background: 'none', border: 'none', color: '#9CA3AF', fontSize: '1.2rem', cursor: 'pointer' },
-  pkgSummary: { background: '#1F2937', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', marginBottom: '16px', fontSize: '0.95rem' },
-  field: { marginBottom: '14px' },
-  label: { display: 'block', fontSize: '0.85rem', color: '#9CA3AF', marginBottom: '6px' },
-  input: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #374151', background: '#1F2937', color: '#FFF', fontSize: '0.95rem', boxSizing: 'border-box' },
-  submitBtn: { width: '100%', padding: '12px', background: '#4F46E5', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  errorBox: { background: '#7F1D1D', color: '#FCA5A5', padding: '10px', borderRadius: '6px', marginBottom: '14px', fontSize: '0.85rem' },
-  successContainer: { textAlign: 'center', padding: '10px 0' }
-};
+const containerStyle = { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 20px', background: '#0a0a0a' };
+const cardStyle = { background: '#111', padding: '30px', borderRadius: '12px', border: '1px solid rgba(0,243,255,0.3)', width: '360px' };
+const inputStyle = { width: '100%', padding: '12px', margin: '8px 0', background: '#222', border: '1px solid #333', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' };
+const btnStyle = { width: '100%', padding: '12px', background: '#00f3ff', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', marginTop: '12px' };
