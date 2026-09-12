@@ -1,5 +1,25 @@
 import React, { useState, useEffect } from 'react';
 
+// Helper function to decode JWT payload without external packages
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (err) {
+    console.error('Failed to decode JWT token:', err);
+    return null;
+  }
+};
+
+
 export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, userId }) {
   const [userEmail, setUserEmail] = useState('');
   const [amount, setAmount] = useState('');
@@ -8,35 +28,55 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [loading, setLoading] = useState(false);
 
-  // 1. Sync state when the modal opens or selectedPackage changes
   useEffect(() => {
     if (isOpen) {
-      // Auto-fill price and credits from selected package if provided
+      // 1. Pre-fill package details
       if (selectedPackage) {
         setAmount(selectedPackage.price || '');
         setCreditsRequested(selectedPackage.credits || '');
       }
 
-      // Read user session from localStorage
+      let detectedEmail = '';
+      let detectedId = userId || '';
+
+      // 2. Check localStorage 'user' object
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
-          if (parsed.email) setUserEmail(parsed.email);
+          detectedEmail = parsed.email || parsed.user_email || '';
+          if (!detectedId) detectedId = parsed.id || parsed.userId || '';
         } catch (err) {
-          console.error('Failed to parse user session:', err);
+          console.error('Error parsing stored user:', err);
         }
       }
+
+      // 3. Fallback: Parse stored JWT token if email is still missing
+      if (!detectedEmail) {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const decoded = parseJwt(token);
+          if (decoded) {
+            detectedEmail = decoded.email || decoded.user_email || decoded.sub || '';
+            if (!detectedId) detectedId = decoded.id || decoded.userId || decoded.sub || '';
+          }
+        }
+      }
+
+      setUserEmail(detectedEmail);
+      setActiveUserId(detectedId);
     }
-  }, [isOpen, selectedPackage]);
+  }, [isOpen, selectedPackage, userId]);
 
   if (!isOpen) return null;
 
-  // 2. Handle Payment Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!userEmail && !userId) {
+    const token = localStorage.getItem('token');
+
+    // Allow submit if email/id exists OR if a valid token is present
+    if (!userEmail && !activeUserId && !token) {
       alert('Active user session not found. Please log in again.');
       return;
     }
@@ -48,11 +88,11 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Authorization': `Bearer ${token || ''}`,
         },
         body: JSON.stringify({
-          userId: userId || null,
-          email: userEmail,
+          userId: activeUserId || null,
+          email: userEmail || null,
           packageId: selectedPackage?.id || 'custom',
           amount: parseFloat(amount),
           creditsRequested: parseInt(creditsRequested, 10),
@@ -64,7 +104,7 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        alert(data.message || 'Payment submitted successfully! Awaiting verification.');
+        alert(data.message || 'Payment submitted successfully!');
         setTransactionId('');
         onClose();
       } else {
@@ -80,13 +120,11 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
   return (
     <div style={styles.overlay}>
       <div style={styles.modalCard}>
-        {/* Header */}
         <div style={styles.header}>
           <h2 style={styles.modalTitle}>📝 Submit Payment Details</h2>
           <button onClick={onClose} style={styles.closeBtn}>&times;</button>
         </div>
 
-        {/* Selected Package Summary Banner */}
         {selectedPackage && (
           <div style={styles.packageBanner}>
             <span style={{ fontWeight: '600', color: '#4F46E5' }}>
@@ -95,12 +133,10 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
           </div>
         )}
 
-        {/* Account Info */}
         <p style={styles.userInfoText}>
-          Account: <strong style={{ color: '#1F2937' }}>{userEmail || userId || 'Active User'}</strong>
+          Account: <strong style={{ color: '#1F2937' }}>{userEmail || activeUserId || 'Authenticated Session'}</strong>
         </p>
 
-        {/* Form Fields */}
         <form onSubmit={handleSubmit}>
           <label style={styles.label}>Payment Method</label>
           <select
@@ -109,8 +145,8 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             style={styles.input}
           >
             <option value="bank_transfer">Bank Transfer</option>
-            <option value="easypaisa">EasyPaisa</option>
-            <option value="crypto">Binance</option>
+            <option value="easypaisa">EasyPaisa / JazzCash</option>
+            <option value="crypto">Crypto / USDT</option>
           </select>
 
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -147,7 +183,6 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
             style={styles.input}
           />
 
-          {/* Buttons */}
           <div style={styles.buttonGroup}>
             <button type="button" onClick={onClose} style={styles.cancelBtn}>
               Cancel
@@ -162,10 +197,9 @@ export default function PaymentDetailsModal({ isOpen, onClose, selectedPackage, 
   );
 }
 
-// Styling matching App.jsx design tokens
 const styles = {
   overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalCard: { background: '#FFFFFF', width: '90%', maxWidth: '440px', padding: '28px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', border: '1px solid #E2E8F0' },
+  modalCard: { background: '#FFFFFF', width: '90%', maxWidth: '440px', padding: '28px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #E2E8F0' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
   modalTitle: { color: '#1F2937', margin: 0, fontSize: '1.25rem', fontWeight: '700' },
   closeBtn: { background: 'none', border: 'none', color: '#9CA3AF', fontSize: '1.5rem', cursor: 'pointer', lineHeight: '1' },
