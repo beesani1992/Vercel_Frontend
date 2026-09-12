@@ -1,7 +1,7 @@
 // src/components/AuthenticatedPaymentForm.jsx
 import React, { useState, useEffect } from 'react';
 
-export default function AuthenticatedPaymentForm() {
+export default function PaymentDetailsModal() {
   const [userEmail, setUserEmail] = useState('');
   const [amount, setAmount] = useState('');
   const [transactionId, setTransactionId] = useState('');
