@@ -1,7 +1,45 @@
 import React, { useState } from 'react';
 
+// Package configurations
+const PACKAGES = [
+  { id: '100_credits', credits: '100 Credits ⚡', price: '$5.00' },
+  { id: '500_credits', credits: '500 Credits ⚡', price: '$20.00' },
+  { id: '1500_credits', credits: '1500 Credits ⚡', price: '$50.00' }
+];
+
+// Account configurations according to payment type
+const ACCOUNTS = {
+  easypaisa: {
+    method: 'EasyPaisa',
+    title: 'Bheesham Kumar',
+    number: '03152829660'
+  },
+  bank: {
+    method: 'Bank Transfer (Nayapay)',
+    title: 'Bheesham Kumar',
+    number: 'PK00XXXX0000000000000000'
+  },
+  binance: {
+    method: 'Binance',
+    title: 'Bheesham Kumar',
+    number: 'PK00XXXX0000000000000000'
+  }
+};
+
 export default function CreditManager() {
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedPkg, setSelectedPkg] = useState(PACKAGES[0]);
+  const [accountType, setAccountType] = useState('easypaisa');
+  const [copied, setCopied] = useState(false);
+
+  const activeAccount = ACCOUNTS[accountType];
+
+  // Copy Account Number to Clipboard
+  const handleCopyAccount = () => {
+    navigator.clipboard.writeText(activeAccount.number);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <>
@@ -34,28 +72,68 @@ export default function CreditManager() {
 
             {/* Credit Packages */}
             <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>1. Select a Package</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-              <div style={packageCardStyle}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#00f3ff' }}>100 Credits ⚡</div>
-                <div style={{ fontSize: '1rem', color: '#aaa', marginTop: '4px' }}>$5.00</div>
-              </div>
-              <div style={packageCardStyle}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#00f3ff' }}>250 Credits ⚡</div>
-                <div style={{ fontSize: '1rem', color: '#aaa', marginTop: '4px' }}>$10.00</div>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px' }}>
+              {PACKAGES.map((pkg) => {
+                const isSelected = selectedPkg.id === pkg.id;
+                return (
+                  <div
+                    key={pkg.id}
+                    onClick={() => setSelectedPkg(pkg)}
+                    style={{
+                      ...packageCardStyle,
+                      border: isSelected ? '1px solid #00f3ff' : '1px solid #222',
+                      background: isSelected ? 'rgba(0, 243, 255, 0.1)' : '#0d0d11',
+                      boxShadow: isSelected ? '0 0 10px rgba(0, 243, 255, 0.2)' : 'none'
+                    }}
+                  >
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#00f3ff' }}>{pkg.credits}</div>
+                    <div style={{ fontSize: '0.9rem', color: '#aaa', marginTop: '4px' }}>{pkg.price}</div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Account Details */}
+            {/* Account Details & Dropdown */}
             <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>2. Transfer Payment</h4>
+            
+            {/* Payment Method Selector */}
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', color: '#aaa', fontSize: '0.85rem', marginBottom: '5px' }}>
+                Select Payment Method:
+              </label>
+              <select
+                value={accountType}
+                onChange={(e) => setAccountType(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="easypaisa">EasyPaisa</option>
+                <option value="bank">Bank Transfer (Nayapay)</option>
+                <option value="binance">Binance</option>
+              </select>
+            </div>
+
+            {/* Dynamic Account Details Card */}
             <div style={accountDetailsStyle}>
-              <p style={{ margin: '5px 0' }}><strong>Bank / Method:</strong> JazzCash / EasyPaisa </p>
-              <p style={{ margin: '5px 0' }}><strong>Account Title:</strong> Bhasham Kumar </p>
-              <p style={{ margin: '5px 0' }}><strong>Account Number:</strong> 03152829660</p>
+              <p style={{ margin: '5px 0' }}>
+                <strong>Bank / Method:</strong> {activeAccount.method}
+              </p>
+              <p style={{ margin: '5px 0' }}>
+                <strong>Account Title:</strong> {activeAccount.title}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '5px 0' }}>
+                <p style={{ margin: 0 }}>
+                  <strong>Account Number / ID:</strong>{' '}
+                  <span style={{ color: '#00f3ff', fontFamily: 'monospace' }}>{activeAccount.number}</span>
+                </p>
+                <button onClick={handleCopyAccount} style={copyBtnStyle}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
             </div>
 
             {/* Instructions */}
-            <div style={{ fontSize: '0.85rem', color: '#888', background: '#111', padding: '12px', borderRadius: '6px', border: '1px solid #222' }}>
-              ℹ️ <strong>Instructions:</strong> After sending payment, send a screenshot of your transaction along with your account email to support/WhatsApp. Credits will be added manually within a few minutes.
+            <div style={{ fontSize: '0.85rem', color: '#888', background: '#111', padding: '12px', borderRadius: '6px', border: '1px solid #222', lineHeight: '1.4' }}>
+              ℹ️ <strong>Instructions:</strong> After sending payment, submit your payment details according to your package. After verification, credits will be added to your profile within a few minutes.
             </div>
 
             {/* Action Buttons */}
@@ -104,11 +182,23 @@ const closeBtnStyle = {
 };
 
 const packageCardStyle = {
-  background: '#0d0d11',
-  border: '1px solid #222',
   borderRadius: '8px',
-  padding: '12px',
-  textAlign: 'center'
+  padding: '12px 8px',
+  textAlign: 'center',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease-in-out'
+};
+
+const selectStyle = {
+  width: '100%',
+  padding: '8px 12px',
+  background: '#0d0d11',
+  border: '1px solid rgba(0, 243, 255, 0.3)',
+  borderRadius: '6px',
+  color: '#fff',
+  fontSize: '0.9rem',
+  outline: 'none',
+  cursor: 'pointer'
 };
 
 const accountDetailsStyle = {
@@ -118,6 +208,16 @@ const accountDetailsStyle = {
   padding: '12px',
   fontSize: '0.9rem',
   marginBottom: '15px'
+};
+
+const copyBtnStyle = {
+  background: 'rgba(0, 243, 255, 0.1)',
+  color: '#00f3ff',
+  border: '1px solid #00f3ff',
+  borderRadius: '4px',
+  padding: '2px 8px',
+  fontSize: '0.75rem',
+  cursor: 'pointer'
 };
 
 const doneBtnStyle = {
