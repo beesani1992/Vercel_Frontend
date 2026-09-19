@@ -1,44 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-// Package configurations
+// Package configurations with numerical amounts for Safepay processing
 const PACKAGES = [
-  { id: '100_credits', credits: '100 Credits ⚡', price: '$5.00' },
-  { id: '500_credits', credits: '500 Credits ⚡', price: '$20.00' },
-  { id: '1500_credits', credits: '1500 Credits ⚡', price: '$50.00' }
+  { id: '100_credits', credits: 100, label: '100 Credits ⚡', price: 1500, priceDisplay: 'PKR 1,500' },
+  { id: '500_credits', credits: 500, label: '500 Credits ⚡', price: 6000, priceDisplay: 'PKR 6,000' },
+  { id: '1500_credits', credits: 1500, label: '1500 Credits ⚡', price: 15000, priceDisplay: 'PKR 15,000' }
 ];
 
-// Account configurations according to payment type
-const ACCOUNTS = {
-  easypaisa: {
-    method: 'EasyPaisa',
-    title: 'Bheesham Kumar',
-    number: '03152829660'
-  },
-  bank: {
-    method: 'Bank Transfer (Nayapay)',
-    title: 'Bheesham Kumar',
-    number: 'PK00XXXX0000000000000000'
-  },
-  binance: {
-    method: 'Binance',
-    title: 'Bheesham Kumar',
-    number: 'PK00XXXX0000000000000000'
-  }
-};
-
-export default function CreditManager() {
+export default function CreditManager({ userId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPkg, setSelectedPkg] = useState(PACKAGES[0]);
-  const [accountType, setAccountType] = useState('easypaisa');
-  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const activeAccount = ACCOUNTS[accountType];
+  // Dynamically load Safepay Checkout JS SDK
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://s3-us-west-2.amazonaws.com/safepayassets/safepay-checkout.min.js';
+    script.async = true;
+    document.body.appendChild(script);
 
-  // Copy Account Number to Clipboard
-  const handleCopyAccount = () => {
-    navigator.clipboard.writeText(activeAccount.number);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // Handle Automated Safepay Payment
+  const handleSafepayPayment = async () => {
+    setLoading(true);
+    try {
+      // 1. Call Express/FastAPI backend to generate Safepay Tracker Token
+      const response = await axios.post('/api/payments/create-checkout', {
+        amount: selectedPkg.price,
+        currency: 'PKR',
+        creditAmount: selectedPkg.credits,
+        packageId: selectedPkg.id,
+        userId: userId
+      });
+
+      const { token } = response.data;
+
+      // 2. Open Safepay Hosted Modal
+      if (window.safepay) {
+        window.safepay.Checkout.open({
+          env: process.env.REACT_APP_SAFEPAY_ENV || 'sandbox', // 'sandbox' or 'production'
+          tracker: token,
+          utility: 'checkout',
+          onCompleted: (data) => {
+            alert('Payment completed successfully! Your credits will reflect shortly.');
+            setIsOpen(false);
+          },
+          onCancelled: () => {
+            setLoading(false);
+          }
+        });
+      } else {
+        alert('Safepay SDK failed to load. Please check your network connection.');
+      }
+    } catch (err) {
+      console.error('Safepay checkout error:', err);
+      alert('Failed to initialize payment session. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,7 +94,7 @@ export default function CreditManager() {
               <button onClick={() => setIsOpen(false)} style={closeBtnStyle}>✕</button>
             </div>
 
-            {/* Credit Packages */}
+            {/* Step 1: Package Selection */}
             <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>1. Select a Package</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px' }}>
               {PACKAGES.map((pkg) => {
@@ -86,59 +110,48 @@ export default function CreditManager() {
                       boxShadow: isSelected ? '0 0 10px rgba(0, 243, 255, 0.2)' : 'none'
                     }}
                   >
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#00f3ff' }}>{pkg.credits}</div>
-                    <div style={{ fontSize: '0.9rem', color: '#aaa', marginTop: '4px' }}>{pkg.price}</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#00f3ff' }}>{pkg.label}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px' }}>{pkg.priceDisplay}</div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Account Details & Dropdown */}
-            <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>2. Transfer Payment</h4>
-            
-            {/* Payment Method Selector */}
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', color: '#aaa', fontSize: '0.85rem', marginBottom: '5px' }}>
-                Select Payment Method:
-              </label>
-              <select
-                value={accountType}
-                onChange={(e) => setAccountType(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="easypaisa">EasyPaisa</option>
-                <option value="bank">Bank Transfer (Nayapay)</option>
-                <option value="binance">Binance</option>
-              </select>
-            </div>
-
-            {/* Dynamic Account Details Card */}
-            <div style={accountDetailsStyle}>
-              <p style={{ margin: '5px 0' }}>
-                <strong>Bank / Method:</strong> {activeAccount.method}
-              </p>
-              <p style={{ margin: '5px 0' }}>
-                <strong>Account Title:</strong> {activeAccount.title}
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '5px 0' }}>
-                <p style={{ margin: 0 }}>
-                  <strong>Account Number / ID:</strong>{' '}
-                  <span style={{ color: '#00f3ff', fontFamily: 'monospace' }}>{activeAccount.number}</span>
-                </p>
-                <button onClick={handleCopyAccount} style={copyBtnStyle}>
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
+            {/* Step 2: Payment Provider Card */}
+            <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>2. Payment Gateway</h4>
+            <div style={providerCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Safepay Checkout</strong>
+                  <p style={{ margin: '4px 0 0 0', color: '#aaa', fontSize: '0.8rem' }}>
+                    Pay via EasyPaisa, JazzCash, Visa, or Mastercard
+                  </p>
+                </div>
+                <span style={badgeStyle}>Instant Auto-Credit</span>
               </div>
             </div>
 
-            {/* Instructions */}
-            <div style={{ fontSize: '0.85rem', color: '#888', background: '#111', padding: '12px', borderRadius: '6px', border: '1px solid #222', lineHeight: '1.4' }}>
-              ℹ️ <strong>Instructions:</strong> After sending payment, submit your payment details according to your package. After verification, credits will be added to your profile within a few minutes.
+            {/* Info Note */}
+            <div style={infoBoxStyle}>
+              🔒 <strong>Automated Verification:</strong> Upon successful checkout, your account credits will update automatically via Webhook.
             </div>
 
             {/* Action Buttons */}
-            <div style={{ marginTop: '20px', textAlign: 'right' }}>
-              <button onClick={() => setIsOpen(false)} style={doneBtnStyle}>Done</button>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setIsOpen(false)} style={cancelBtnStyle}>
+                Cancel
+              </button>
+              <button 
+                onClick={handleSafepayPayment} 
+                disabled={loading}
+                style={{
+                  ...payBtnStyle,
+                  opacity: loading ? 0.6 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loading ? 'Initializing...' : `Pay ${selectedPkg.priceDisplay} with Safepay`}
+              </button>
             </div>
           </div>
         </div>
@@ -189,43 +202,47 @@ const packageCardStyle = {
   transition: 'all 0.2s ease-in-out'
 };
 
-const selectStyle = {
-  width: '100%',
-  padding: '8px 12px',
+const providerCardStyle = {
   background: '#0d0d11',
-  border: '1px solid rgba(0, 243, 255, 0.3)',
-  borderRadius: '6px',
-  color: '#fff',
-  fontSize: '0.9rem',
-  outline: 'none',
-  cursor: 'pointer'
-};
-
-const accountDetailsStyle = {
-  background: '#0d0d11',
-  border: '1px solid rgba(0, 243, 255, 0.2)',
+  border: '1px solid rgba(0, 243, 255, 0.25)',
   borderRadius: '8px',
-  padding: '12px',
-  fontSize: '0.9rem',
+  padding: '14px',
   marginBottom: '15px'
 };
 
-const copyBtnStyle = {
-  background: 'rgba(0, 243, 255, 0.1)',
+const badgeStyle = {
+  background: 'rgba(0, 243, 255, 0.15)',
   color: '#00f3ff',
-  border: '1px solid #00f3ff',
-  borderRadius: '4px',
-  padding: '2px 8px',
   fontSize: '0.75rem',
+  padding: '4px 8px',
+  borderRadius: '4px',
+  border: '1px solid rgba(0, 243, 255, 0.3)'
+};
+
+const infoBoxStyle = {
+  fontSize: '0.82rem',
+  color: '#888',
+  background: '#111',
+  padding: '12px',
+  borderRadius: '6px',
+  border: '1px solid #222',
+  lineHeight: '1.4'
+};
+
+const cancelBtnStyle = {
+  background: 'transparent',
+  color: '#aaa',
+  border: '1px solid #333',
+  padding: '8px 16px',
+  borderRadius: '6px',
   cursor: 'pointer'
 };
 
-const doneBtnStyle = {
+const payBtnStyle = {
   background: '#00f3ff',
   color: '#000',
   border: 'none',
-  padding: '8px 20px',
+  padding: '8px 18px',
   borderRadius: '6px',
-  fontWeight: 'bold',
-  cursor: 'pointer'
+  fontWeight: 'bold'
 };
