@@ -72,19 +72,19 @@ export default function CreditManager({ userId = 'usr_123', onCreditsUpdated }) 
 
   // 3. Confirm Transaction ID with Server & Auto-Add Credits
   const verifyPaymentWithBackend = async (trackerToken) => {
-    setPaymentStatus({ text: 'Verifying transaction with Safepay...', type: 'info' });
+  setPaymentStatus({ text: 'Verifying transaction with Safepay...', type: 'info' });
 
-    try {
-      const response = await fetch('/api/payments/verify-safepay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trackerToken: trackerToken,
-          userId: userId,
-          packageId: selectedPkg.id
-        })
-      });
-
+  try {
+    const response = await fetch('/api/payments/verify-safepay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trackerToken: trackerToken,
+        packageId: selectedPkg.id,
+        // PASS USER ID OR EMAIL HERE:
+        userIdentifier: userId // or user.email depending on your auth state variable
+      })
+    });
       const resData = await response.json();
 
       if (resData.success) {
