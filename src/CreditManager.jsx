@@ -1,102 +1,150 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 
-// Package configurations with numerical amounts for Safepay processing
+// Package configurations updated to USD ($)
 const PACKAGES = [
-  { id: '100_credits', credits: 100, label: '100 Credits ⚡', price: 1500, priceDisplay: 'PKR 1,500' },
-  { id: '500_credits', credits: 500, label: '500 Credits ⚡', price: 6000, priceDisplay: 'PKR 6,000' },
-  { id: '1500_credits', credits: 1500, label: '1500 Credits ⚡', price: 15000, priceDisplay: 'PKR 15,000' }
+  { id: '100_credits', credits: 100, label: '100 Credits ⚡', price: 5 },   // $5.00 USD
+  { id: '500_credits', credits: 500, label: '500 Credits ⚡', price: 20 },  // $20.00 USD
+  { id: '1500_credits', credits: 1500, label: '1500 Credits ⚡', price: 50 } // $50.00 USD
 ];
 
-export default function CreditManager({ userId }) {
+export default function CreditManager({ userId = 'usr_123', onCreditsUpdated }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPkg, setSelectedPkg] = useState(PACKAGES[0]);
-  const [loading, setLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState({ text: '', type: '' });
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Dynamically load Safepay Checkout JS SDK
+  // Screen size detection for mobile responsiveness
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://s3-us-west-2.amazonaws.com/safepayassets/safepay-checkout.min.js';
-    script.async = true;
-    document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-    };
+    const handleResize = () => setIsMobile(window.innerWidth < 480);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Handle Automated Safepay Payment
-  const handleSafepayPayment = async () => {
-    setLoading(true);
+  // 1. Initiate Safepay Sandbox Payment (Currency set to USD)
+  const handleSafepayCheckout = async () => {
+    setPaymentStatus({ text: 'Initializing Safepay sandbox session...', type: 'info' });
+    setIsProcessing(true);
+
     try {
-      // 1. Call Express/FastAPI backend to generate Safepay Tracker Token
-      const response = await axios.post('/api/payments/create-checkout', {
-        amount: selectedPkg.price,
-        currency: 'PKR',
-        creditAmount: selectedPkg.credits,
-        packageId: selectedPkg.id,
-        userId: userId
+      // Create order tracker on backend in USD
+      const response = await fetch('/api/payments/create-safepay-tracker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: selectedPkg.price,
+          currency: 'USD',
+          packageId: selectedPkg.id,
+          userId: userId
+        })
       });
 
-      const { token } = response.data;
+      const data = await response.json();
+      if (!data.success || !data.trackerToken) {
+        throw new Error(data.message || 'Failed to initialize payment with Safepay.');
+      }
 
-      // 2. Open Safepay Hosted Modal
-      if (window.safepay) {
-        window.safepay.Checkout.open({
-          env: process.env.REACT_APP_SAFEPAY_ENV || 'sandbox', // 'sandbox' or 'production'
-          tracker: token,
-          utility: 'checkout',
-          onCompleted: (data) => {
-            alert('Payment completed successfully! Your credits will reflect shortly.');
-            setIsOpen(false);
+      const trackerToken = data.trackerToken;
+
+      // 2. Launch Safepay Sandbox Checkout SDK
+      if (window.Safepay) {
+        window.Safepay.Checkout.open({
+          tracker: trackerToken,
+          environment: 'sandbox', // Safepay Sandbox Mode
+          onSuccess: async () => {
+            // Callback when payment succeeds in sandbox
+            await verifyPaymentWithBackend(trackerToken);
           },
-          onCancelled: () => {
-            setLoading(false);
+          onDismiss: () => {
+            setIsProcessing(false);
+            setPaymentStatus({ text: 'Payment cancelled.', type: 'error' });
           }
         });
       } else {
-        alert('Safepay SDK failed to load. Please check your network connection.');
+        throw new Error('Safepay SDK not detected. Make sure checkout.js script is included in head.');
       }
     } catch (err) {
-      console.error('Safepay checkout error:', err);
-      alert('Failed to initialize payment session. Please try again.');
-    } finally {
-      setLoading(false);
+      setIsProcessing(false);
+      setPaymentStatus({ text: err.message, type: 'error' });
+    }
+  };
+
+  // 3. Confirm Transaction ID with Server & Auto-Add Credits
+  const verifyPaymentWithBackend = async (trackerToken) => {
+    setPaymentStatus({ text: 'Verifying transaction with Safepay...', type: 'info' });
+
+    try {
+      const response = await fetch('/api/payments/verify-safepay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackerToken: trackerToken,
+          userId: userId,
+          packageId: selectedPkg.id
+        })
+      });
+
+      const resData = await response.json();
+
+      if (resData.success) {
+        setPaymentStatus({
+          text: `Payment Successful! Added ${resData.addedCredits} Credits to your account.`,
+          type: 'success'
+        });
+
+        // Callback to update local state in main app header
+        if (onCreditsUpdated) {
+          onCreditsUpdated(resData.newCreditBalance);
+        }
+
+        setTimeout(() => {
+          setIsOpen(false);
+          setPaymentStatus({ text: '', type: '' });
+          setIsProcessing(false);
+        }, 2200);
+      } else {
+        throw new Error(resData.message || 'Transaction verification failed.');
+      }
+    } catch (err) {
+      setIsProcessing(false);
+      setPaymentStatus({ text: err.message, type: 'error' });
     }
   };
 
   return (
     <>
-      {/* Trigger Button in Nav */}
+      {/* TRIGGER BUTTON */}
       <button
         onClick={() => setIsOpen(true)}
-        style={{
-          background: 'rgba(0, 243, 255, 0.15)',
-          color: '#00f3ff',
-          border: '1px solid #00f3ff',
-          padding: '6px 14px',
-          borderRadius: '20px',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          transition: '0.3s'
-        }}
+        style={triggerBtnStyle}
       >
         + Buy Credits ⚡
       </button>
 
-      {/* POPUP MODAL */}
+      {/* SAFEPAY MODAL POPUP */}
       {isOpen && (
         <div style={overlayStyle}>
-          <div style={modalStyle}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, color: '#00f3ff', fontSize: '1.4rem' }}>Buy Credits</h2>
+          <div style={{
+            ...modalStyle,
+            padding: isMobile ? '16px' : '24px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, color: '#00f3ff', fontSize: isMobile ? '1.2rem' : '1.4rem' }}>
+                Buy Credits (Safepay)
+              </h2>
               <button onClick={() => setIsOpen(false)} style={closeBtnStyle}>✕</button>
             </div>
 
-            {/* Step 1: Package Selection */}
-            <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>1. Select a Package</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px' }}>
+            {/* Package Selection */}
+            <h4 style={{ margin: '0 0 10px 0', color: '#fff', fontSize: '0.95rem' }}>Select a Package</h4>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+              gap: '10px',
+              marginBottom: '20px'
+            }}>
               {PACKAGES.map((pkg) => {
                 const isSelected = selectedPkg.id === pkg.id;
                 return (
@@ -110,49 +158,44 @@ export default function CreditManager({ userId }) {
                       boxShadow: isSelected ? '0 0 10px rgba(0, 243, 255, 0.2)' : 'none'
                     }}
                   >
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#00f3ff' }}>{pkg.label}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px' }}>{pkg.priceDisplay}</div>
+                    <div style={{ fontSize: isMobile ? '0.95rem' : '1rem', fontWeight: 'bold', color: '#00f3ff' }}>
+                      {pkg.label}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px' }}>
+                      ${pkg.price} USD
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Step 2: Payment Provider Card */}
-            <h4 style={{ margin: '0 0 10px 0', color: '#fff' }}>2. Payment Gateway</h4>
-            <div style={providerCardStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Safepay Checkout</strong>
-                  <p style={{ margin: '4px 0 0 0', color: '#aaa', fontSize: '0.8rem' }}>
-                    Pay via EasyPaisa, JazzCash, Visa, or Mastercard
-                  </p>
-                </div>
-                <span style={badgeStyle}>Instant Auto-Credit</span>
+            {/* Status & Error Message Box */}
+            {paymentStatus.text && (
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: '6px',
+                fontSize: '0.85rem',
+                marginBottom: '16px',
+                background: paymentStatus.type === 'error' ? 'rgba(255, 50, 50, 0.15)' : 'rgba(0, 243, 255, 0.15)',
+                color: paymentStatus.type === 'error' ? '#ff6b6b' : '#00f3ff',
+                border: paymentStatus.type === 'error' ? '1px solid #ff3232' : '1px solid #00f3ff'
+              }}>
+                {paymentStatus.text}
               </div>
-            </div>
+            )}
 
-            {/* Info Note */}
-            <div style={infoBoxStyle}>
-              🔒 <strong>Automated Verification:</strong> Upon successful checkout, your account credits will update automatically via Webhook.
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setIsOpen(false)} style={cancelBtnStyle}>
-                Cancel
-              </button>
-              <button 
-                onClick={handleSafepayPayment} 
-                disabled={loading}
-                style={{
-                  ...payBtnStyle,
-                  opacity: loading ? 0.6 : 1,
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loading ? 'Initializing...' : `Pay ${selectedPkg.priceDisplay} with Safepay`}
-              </button>
-            </div>
+            {/* Checkout Action Button */}
+            <button
+              onClick={handleSafepayCheckout}
+              disabled={isProcessing}
+              style={{
+                ...checkoutBtnStyle,
+                opacity: isProcessing ? 0.6 : 1,
+                cursor: isProcessing ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {isProcessing ? 'Processing Transaction...' : `Pay $${selectedPkg.price} USD via Safepay 💳`}
+            </button>
           </div>
         </div>
       )}
@@ -161,6 +204,18 @@ export default function CreditManager({ userId }) {
 }
 
 // Inline Styles
+const triggerBtnStyle = {
+  background: 'rgba(0, 243, 255, 0.15)',
+  color: '#00f3ff',
+  border: '1px solid #00f3ff',
+  padding: '6px 14px',
+  borderRadius: '20px',
+  fontWeight: 'bold',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  transition: '0.3s'
+};
+
 const overlayStyle = {
   position: 'fixed',
   top: 0,
@@ -172,16 +227,18 @@ const overlayStyle = {
   justifyContent: 'center',
   alignItems: 'center',
   zIndex: 1000,
-  backdropFilter: 'blur(4px)'
+  backdropFilter: 'blur(4px)',
+  padding: '12px'
 };
 
 const modalStyle = {
   background: '#16161a',
   border: '1px solid rgba(0, 243, 255, 0.3)',
   borderRadius: '12px',
-  padding: '24px',
-  width: '90%',
+  width: '100%',
   maxWidth: '480px',
+  maxHeight: '90vh',
+  overflowY: 'auto',
   boxShadow: '0 0 20px rgba(0, 243, 255, 0.2)',
   color: '#fff'
 };
@@ -202,47 +259,13 @@ const packageCardStyle = {
   transition: 'all 0.2s ease-in-out'
 };
 
-const providerCardStyle = {
-  background: '#0d0d11',
-  border: '1px solid rgba(0, 243, 255, 0.25)',
-  borderRadius: '8px',
-  padding: '14px',
-  marginBottom: '15px'
-};
-
-const badgeStyle = {
-  background: 'rgba(0, 243, 255, 0.15)',
-  color: '#00f3ff',
-  fontSize: '0.75rem',
-  padding: '4px 8px',
-  borderRadius: '4px',
-  border: '1px solid rgba(0, 243, 255, 0.3)'
-};
-
-const infoBoxStyle = {
-  fontSize: '0.82rem',
-  color: '#888',
-  background: '#111',
+const checkoutBtnStyle = {
+  width: '100%',
   padding: '12px',
-  borderRadius: '6px',
-  border: '1px solid #222',
-  lineHeight: '1.4'
-};
-
-const cancelBtnStyle = {
-  background: 'transparent',
-  color: '#aaa',
-  border: '1px solid #333',
-  padding: '8px 16px',
-  borderRadius: '6px',
-  cursor: 'pointer'
-};
-
-const payBtnStyle = {
-  background: '#00f3ff',
+  background: 'linear-gradient(90deg, #00f3ff, #0088ff)',
   color: '#000',
   border: 'none',
-  padding: '8px 18px',
-  borderRadius: '6px',
-  fontWeight: 'bold'
+  borderRadius: '8px',
+  fontWeight: 'bold',
+  fontSize: '0.95rem'
 };
