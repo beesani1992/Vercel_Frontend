@@ -29,7 +29,7 @@ export default function CreditManager({ userId = 'usr_123', onCreditsUpdated }) 
 
     try {
       // Create order tracker on backend in USD
-      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/createSafepayTracker', {
+      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/create-safepay-tracker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
