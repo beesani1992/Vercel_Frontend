@@ -5,11 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Video To Script</title>
+
+    <!-- Safepay Checkout SDK placed in head to ensure early load -->
+    <script src="https://sandbox.api.getsafepay.com/checkout.js"></script>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Safepay Checkout SDK -->
-    <script src="https://sandbox.api.getsafepay.com/checkout.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
