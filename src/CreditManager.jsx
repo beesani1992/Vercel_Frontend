@@ -60,14 +60,22 @@ export default function CreditManager({ userEmail = 'user@example.com', onCredit
     setPaymentStatus({ text: 'Initializing Safepay sandbox session...', type: 'info' });
     setIsProcessing(true);
 
-    try {
-      // Ensure SDK is ready before making API requests
-      const SafepaySDK = await getSafepayInstance();
+    // Timeout controller to prevent hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout
 
-      // Create order tracker on backend using email
+    try {
+      // 1. Ensure Safepay SDK is loaded
+      console.log('[Safepay] Loading SDK...');
+      const SafepaySDK = await getSafepayInstance();
+      console.log('[Safepay] SDK Loaded successfully:', SafepaySDK);
+
+      // 2. Call Backend API to create Tracker Token
+      console.log('[Safepay] Sending request to backend...');
       const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/createsafepaytracker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           amount: selectedPkg.price,
           currency: 'USD',
@@ -76,11 +84,22 @@ export default function CreditManager({ userEmail = 'user@example.com', onCredit
         })
       });
 
-      const data = await response.json();
-      if (!data.success || !data.trackerToken) {
-        throw new Error(data.message || 'Failed to initialize payment with Safepay.');
+      clearTimeout(timeoutId);
+
+      // Parse response status
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Safepay] Backend responded with error status:', response.status, errorText);
+        throw new Error(`Backend Error (${response.status}): ${errorText || 'Failed to communicate with payment server.'}`);
       }
 
+      const data = await response.json();
+      console.log('[Safepay] Backend Response:', data);
+
+      if (!data.success || !data.trackerToken) {
+        throw new Error(data.message || 'Failed to generate tracker token from Safepay.');
+      }
+      
       const trackerToken = data.trackerToken;
       const checkout = SafepaySDK.Checkout || SafepaySDK;
 
