@@ -24,51 +24,123 @@ export default function CreditManager({ userEmail = 'user@example.com', onCredit
 
   // Helper function to resolve or load Safepay SDK safely
   const getSafepayInstance = () => {
-    return new Promise((resolve, reject) => {
-      // 1. Check all global window references
-      const sdk = window.Safepay || window.safepay || window.SafepayCheckout;
-      if (sdk) return resolve(sdk);
+  return new Promise((resolve, reject) => {
 
-      // 2. Check if script tag already exists
-      const existingScript = document.querySelector('script[src*="checkout.js"]');
-      if (existingScript) {
-        existingScript.onload = () => {
-          const loadedSdk = window.Safepay || window.safepay || window.SafepayCheckout;
-          if (loadedSdk) resolve(loadedSdk);
-          else reject(new Error('Safepay script loaded, but global instance is undefined.'));
-        };
-        existingScript.onerror = () => reject(new Error('Failed to load Safepay script. Check ad-blockers.'));
+    // Check existing globals first
+    const getSDK = () =>
+      window.Safepay ||
+      window.safepay ||
+      window.SafepayCheckout;
+
+    const existingSDK = getSDK();
+
+    if (existingSDK) {
+      console.log('[Safepay] Existing SDK found:', existingSDK);
+      resolve(existingSDK);
+      return;
+    }
+
+    // Check whether script already exists
+    let script = document.querySelector(
+      'script[data-safepay-sdk="true"]'
+    );
+
+    if (script) {
+      console.log('[Safepay] SDK script already exists');
+
+      // It may already have loaded but not exposed the expected global
+      const sdkAfterExistingScript = getSDK();
+
+      if (sdkAfterExistingScript) {
+        resolve(sdkAfterExistingScript);
         return;
       }
 
-      // 3. Dynamically inject script tag if absent
-      const script = document.createElement('script');
-      script.src = 'https://sandbox.api.getsafepay.com/checkout.js';
-      script.async = true;
-      script.onload = () => {
-        const loadedSdk = window.Safepay || window.safepay || window.SafepayCheckout;
-        if (loadedSdk) resolve(loadedSdk);
-        else reject(new Error('Safepay checkout script loaded, but SDK object not found.'));
-      };
-      script.onerror = () => reject(new Error('Could not load Safepay checkout.js. Check network or ad-blockers.'));
-      document.head.appendChild(script);
-    });
-  };
+      const timeout = setTimeout(() => {
+        reject(
+          new Error(
+            'Safepay SDK script exists but SDK global was not initialized.'
+          )
+        );
+      }, 10000);
 
-  // 1. Initiate Safepay Sandbox Payment
-  const handleSafepayCheckout = async () => {
-    setPaymentStatus({ text: 'Initializing Safepay sandbox session...', type: 'info' });
-    setIsProcessing(true);
+      script.addEventListener('load', () => {
+        clearTimeout(timeout);
 
-    // Timeout controller to prevent hanging forever
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout
+        const sdk = getSDK();
 
-    try {
-      // 1. Ensure Safepay SDK is loaded
-      console.log('[Safepay] Loading SDK...');
-      const SafepaySDK = await getSafepayInstance();
-      console.log('[Safepay] SDK Loaded successfully:', SafepaySDK);
+        if (sdk) {
+          console.log('[Safepay] SDK loaded:', sdk);
+          resolve(sdk);
+        } else {
+          reject(
+            new Error(
+              'Safepay script loaded, but no Safepay SDK global was found.'
+            )
+          );
+        }
+      }, { once: true });
+
+      script.addEventListener('error', () => {
+        clearTimeout(timeout);
+        reject(new Error('Safepay SDK failed to load.'));
+      }, { once: true });
+
+      return;
+    }
+
+    // Create script
+    script = document.createElement('script');
+
+    script.src =
+      'https://sandbox.api.getsafepay.com/checkout.js';
+
+    script.async = true;
+
+    script.dataset.safepaySdk = 'true';
+
+    script.onload = () => {
+      console.log('[Safepay] checkout.js loaded');
+
+      const sdk = getSDK();
+
+      console.log('[Safepay] Available globals:', {
+        Safepay: window.Safepay,
+        safepay: window.safepay,
+        SafepayCheckout: window.SafepayCheckout
+      });
+
+      if (sdk) {
+        resolve(sdk);
+      } else {
+        reject(
+          new Error(
+            'checkout.js loaded, but Safepay SDK global was not found.'
+          )
+        );
+      }
+    };
+
+    script.onerror = () => {
+      reject(
+        new Error(
+          'Failed to load Safepay checkout.js. Check browser Network tab, CSP, ad-blocker, or Safepay SDK URL.'
+        )
+      );
+    };
+
+    document.head.appendChild(script);
+
+    // Absolute timeout
+    setTimeout(() => {
+      reject(
+        new Error(
+          'Safepay SDK initialization timed out after 10 seconds.'
+        )
+      );
+    }, 10000);
+  });
+};
 
       // 2. Call Backend API to create Tracker Token
       console.log('[Safepay] Sending request to backend...');
