@@ -7,7 +7,7 @@ const PACKAGES = [
   { id: '1500_credits', credits: 1500, label: '1500 Credits ⚡', price: 50 } // $50.00 USD
 ];
 
-export default function CreditManager({ userEmail = 'user@example.com', onCreditsUpdated }) {
+export default function CreditManager({ userId = 'usr_123', onCreditsUpdated }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPkg, setSelectedPkg] = useState(PACKAGES[0]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,202 +22,78 @@ export default function CreditManager({ userEmail = 'user@example.com', onCredit
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Helper function to resolve or load Safepay SDK safely
-  const getSafepayInstance = () => {
-  return new Promise((resolve, reject) => {
+  // 1. Initiate Safepay Sandbox Payment (Currency set to USD)
+  const handleSafepayCheckout = async () => {
+    setPaymentStatus({ text: 'Initializing Safepay sandbox session...', type: 'info' });
+    setIsProcessing(true);
 
-    // Check existing globals first
-    const getSDK = () =>
-      window.Safepay ||
-      window.safepay ||
-      window.SafepayCheckout;
-
-    const existingSDK = getSDK();
-
-    if (existingSDK) {
-      console.log('[Safepay] Existing SDK found:', existingSDK);
-      resolve(existingSDK);
-      return;
-    }
-
-    // Check whether script already exists
-    let script = document.querySelector(
-      'script[data-safepay-sdk="true"]'
-    );
-
-    if (script) {
-      console.log('[Safepay] SDK script already exists');
-
-      // It may already have loaded but not exposed the expected global
-      const sdkAfterExistingScript = getSDK();
-
-      if (sdkAfterExistingScript) {
-        resolve(sdkAfterExistingScript);
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        reject(
-          new Error(
-            'Safepay SDK script exists but SDK global was not initialized.'
-          )
-        );
-      }, 10000);
-
-      script.addEventListener('load', () => {
-        clearTimeout(timeout);
-
-        const sdk = getSDK();
-
-        if (sdk) {
-          console.log('[Safepay] SDK loaded:', sdk);
-          resolve(sdk);
-        } else {
-          reject(
-            new Error(
-              'Safepay script loaded, but no Safepay SDK global was found.'
-            )
-          );
-        }
-      }, { once: true });
-
-      script.addEventListener('error', () => {
-        clearTimeout(timeout);
-        reject(new Error('Safepay SDK failed to load.'));
-      }, { once: true });
-
-      return;
-    }
-
-    // Create script
-    script = document.createElement('script');
-
-    script.src =
-      'https://sandbox.api.getsafepay.com/checkout.js';
-
-    script.async = true;
-
-    script.dataset.safepaySdk = 'true';
-
-    script.onload = () => {
-      console.log('[Safepay] checkout.js loaded');
-
-      const sdk = getSDK();
-
-      console.log('[Safepay] Available globals:', {
-        Safepay: window.Safepay,
-        safepay: window.safepay,
-        SafepayCheckout: window.SafepayCheckout
-      });
-
-      if (sdk) {
-        resolve(sdk);
-      } else {
-        reject(
-          new Error(
-            'checkout.js loaded, but Safepay SDK global was not found.'
-          )
-        );
-      }
-    };
-
-    script.onerror = () => {
-      reject(
-        new Error(
-          'Failed to load Safepay checkout.js. Check browser Network tab, CSP, ad-blocker, or Safepay SDK URL.'
-        )
-      );
-    };
-
-    document.head.appendChild(script);
-
-    // Absolute timeout
-    setTimeout(() => {
-      reject(
-        new Error(
-          'Safepay SDK initialization timed out after 10 seconds.'
-        )
-      );
-    }, 10000);
-  });
-};
-
-      // 2. Call Backend API to create Tracker Token
-      console.log('[Safepay] Sending request to backend...');
-      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/createsafepaytracker', {
+    try {
+      // Create order tracker on backend in USD
+      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/create-safepay-tracker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
         body: JSON.stringify({
           amount: selectedPkg.price,
           currency: 'USD',
           packageId: selectedPkg.id,
-          email: userEmail
+          userId: userId
         })
       });
 
-      clearTimeout(timeoutId);
-
-      // Parse response status
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Safepay] Backend responded with error status:', response.status, errorText);
-        throw new Error(`Backend Error (${response.status}): ${errorText || 'Failed to communicate with payment server.'}`);
-      }
-
       const data = await response.json();
-      console.log('[Safepay] Backend Response:', data);
-
       if (!data.success || !data.trackerToken) {
-        throw new Error(data.message || 'Failed to generate tracker token from Safepay.');
+        throw new Error(data.message || 'Failed to initialize payment with Safepay.');
       }
-      
+
       const trackerToken = data.trackerToken;
-      const checkout = SafepaySDK.Checkout || SafepaySDK;
 
-      // 2. Launch Safepay Sandbox Checkout SDK Modal
-      checkout.open({
-        tracker: trackerToken,
-        environment: 'sandbox',
-        onSuccess: async () => {
-          await verifyPaymentWithBackend(trackerToken);
-        },
-        onDismiss: () => {
-          setIsProcessing(false);
-          setPaymentStatus({ text: 'Payment cancelled.', type: 'error' });
-        }
-      });
-
+      // 2. Launch Safepay Sandbox Checkout SDK
+      if (window.Safepay) {
+        window.Safepay.Checkout.open({
+          tracker: trackerToken,
+          environment: 'sandbox', // Safepay Sandbox Mode
+          onSuccess: async () => {
+            // Callback when payment succeeds in sandbox
+            await verifyPaymentWithBackend(trackerToken);
+          },
+          onDismiss: () => {
+            setIsProcessing(false);
+            setPaymentStatus({ text: 'Payment cancelled.', type: 'error' });
+          }
+        });
+      } else {
+        throw new Error('Safepay SDK not detected. Make sure checkout.js script is included in head.');
+      }
     } catch (err) {
       setIsProcessing(false);
       setPaymentStatus({ text: err.message, type: 'error' });
     }
   };
 
-  // 3. Confirm Transaction ID with Server & Update Credits in creditManager table by email
+  // 3. Confirm Transaction ID with Server & Auto-Add Credits
   const verifyPaymentWithBackend = async (trackerToken) => {
-    setPaymentStatus({ text: 'Verifying transaction with Safepay...', type: 'info' });
+  setPaymentStatus({ text: 'Verifying transaction with Safepay...', type: 'info' });
 
-    try {
-      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/payments/verify-safepay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trackerToken: trackerToken,
-          packageId: selectedPkg.id,
-          email: userEmail
-        })
-      });
-
+  try {
+    const response = await fetch('/api/payments/verify-safepay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trackerToken: trackerToken,
+        packageId: selectedPkg.id,
+        // PASS USER ID OR EMAIL HERE:
+        userIdentifier: userId // or user.email depending on your auth state variable
+      })
+    });
       const resData = await response.json();
 
       if (resData.success) {
         setPaymentStatus({
-          text: `Payment Successful! Added ${resData.addedCredits || selectedPkg.credits} Credits to your account.`,
+          text: `Payment Successful! Added ${resData.addedCredits} Credits to your account.`,
           type: 'success'
         });
 
-        // Callback to update local state in header
+        // Callback to update local state in main app header
         if (onCreditsUpdated) {
           onCreditsUpdated(resData.newCreditBalance);
         }
@@ -348,7 +224,7 @@ const overlayStyle = {
   bottom: 0,
   backgroundColor: 'rgba(0, 0, 0, 0.85)',
   display: 'flex',
-  justify: 'center',
+  justifyContent: 'center',
   alignItems: 'center',
   zIndex: 1000,
   backdropFilter: 'blur(4px)',
