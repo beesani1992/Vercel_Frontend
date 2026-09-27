@@ -38,7 +38,7 @@ const BACKEND_URL =
 // ============================================================
 
 export default function CreditManager({
-  userId = 'usr_123',
+  userEmail = 'abc@example.com',
   onCreditsUpdated,
 }) {
   const [isOpen, setIsOpen] = useState(false);
