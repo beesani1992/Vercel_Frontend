@@ -123,7 +123,7 @@ export default function CreditManager({
 
           body: JSON.stringify({
             packageId: selectedPkg.id,
-            userIdentifier: userId,
+            userEmail: userEmail,
           }),
         }
       );
