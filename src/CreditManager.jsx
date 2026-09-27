@@ -254,7 +254,7 @@ export default function CreditManager({
 
       sessionStorage.setItem(
         'safepay_user',
-        userId
+        userEmail
       );
 
 
