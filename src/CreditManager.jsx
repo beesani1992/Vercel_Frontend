@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // ============================================================
 // PACKAGE CONFIGURATION
 // ============================================================
+// IMPORTANT:
+// The backend is the final authority for price and credits.
+// These values are only used for displaying the packages in UI.
 
 const PACKAGES = [
   {
@@ -32,32 +35,29 @@ const PACKAGES = [
 const BACKEND_URL =
   'https://vercel-backend-two-umber.vercel.app';
 
-
 // ============================================================
 // COMPONENT
 // ============================================================
 
 export default function CreditManager({
-  userEmail = 'abc@example.com',
+  userEmail,
   onCreditsUpdated,
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const [selectedPkg, setSelectedPkg] =
-    useState(PACKAGES[0]);
+  const [selectedPkg, setSelectedPkg] = useState(
+    PACKAGES[0]
+  );
 
   const [isProcessing, setIsProcessing] =
     useState(false);
 
-  const [paymentStatus, setPaymentStatus] =
-    useState({
-      text: '',
-      type: '',
-    });
+  const [paymentStatus, setPaymentStatus] = useState({
+    text: '',
+    type: '',
+  });
 
-  const [isMobile, setIsMobile] =
-    useState(false);
-
+  const [isMobile, setIsMobile] = useState(false);
 
   // ==========================================================
   // MOBILE RESPONSIVENESS
@@ -83,18 +83,76 @@ export default function CreditManager({
     };
   }, []);
 
+  // ==========================================================
+  // VALIDATE EMAIL
+  // ==========================================================
+
+  const isValidEmail = (email) => {
+    if (!email) {
+      return false;
+    }
+
+    const normalizedEmail =
+      String(email).trim();
+
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      normalizedEmail
+    );
+  };
 
   // ==========================================================
   // SAFEPAY CHECKOUT
   // ==========================================================
 
   const handleSafepayCheckout = async () => {
-    if (isProcessing) return;
+    if (isProcessing) {
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Validate user email
+    // --------------------------------------------------------
+
+    const normalizedEmail =
+      String(userEmail || '').trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+      setPaymentStatus({
+        text:
+          'A valid user email is required before starting payment.',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Validate selected package
+    // --------------------------------------------------------
+
+    const validPackage = PACKAGES.find(
+      (pkg) => pkg.id === selectedPkg?.id
+    );
+
+    if (!validPackage) {
+      setPaymentStatus({
+        text:
+          'Invalid credit package selected.',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Start processing
+    // --------------------------------------------------------
 
     setIsProcessing(true);
 
     setPaymentStatus({
-      text: 'Creating Safepay sandbox payment...',
+      text:
+        'Creating Safepay sandbox payment...',
       type: 'info',
     });
 
@@ -105,11 +163,28 @@ export default function CreditManager({
 
       console.log(
         '[Safepay] Package:',
-        selectedPkg
+        validPackage
+      );
+
+      console.log(
+        '[Safepay] User email:',
+        normalizedEmail
       );
 
       // ------------------------------------------------------
-      // CREATE TRACKER ON YOUR BACKEND
+      // CREATE PAYMENT SESSION ON BACKEND
+      // ------------------------------------------------------
+      //
+      // IMPORTANT:
+      // Do NOT send amount or currency.
+      //
+      // The backend determines:
+      //
+      // 100_credits  -> $5
+      // 500_credits  -> $20
+      // 1500_credits -> $50
+      //
+      // The backend is therefore the source of truth.
       // ------------------------------------------------------
 
       const response = await fetch(
@@ -119,21 +194,20 @@ export default function CreditManager({
 
           headers: {
             'Content-Type': 'application/json',
+            Accept: 'application/json',
           },
 
           body: JSON.stringify({
-            packageId: selectedPkg.id,
-            userEmail: userEmail,
+            packageId: validPackage.id,
+            userEmail: normalizedEmail,
           }),
         }
       );
-
 
       console.log(
         '[Safepay] Backend status:',
         response.status
       );
-
 
       // ------------------------------------------------------
       // READ RESPONSE
@@ -147,69 +221,77 @@ export default function CreditManager({
         responseText
       );
 
+      let data = null;
 
-      let data;
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error(
+            '[Safepay] JSON parse error:',
+            parseError
+          );
 
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
+          throw new Error(
+            `Backend returned invalid JSON (${response.status}).`
+          );
+        }
+      }
+
+      if (!data) {
         throw new Error(
-          'Backend returned invalid JSON: ' +
-          responseText
+          `Backend returned an empty response (${response.status}).`
         );
       }
 
-
       // ------------------------------------------------------
-      // CHECK HTTP ERROR
+      // HTTP ERROR
       // ------------------------------------------------------
 
       if (!response.ok) {
         throw new Error(
           data.message ||
-          data.error ||
-          `Backend error (${response.status})`
+            data.error ||
+            `Backend error (${response.status}).`
         );
       }
 
-
       // ------------------------------------------------------
-      // CHECK SAFEPAY RESPONSE
+      // APPLICATION ERROR
       // ------------------------------------------------------
 
-      if (!data.success) {
+      if (data.success !== true) {
         throw new Error(
           data.message ||
-          'Safepay payment initialization failed.'
+            'Safepay payment initialization failed.'
         );
       }
 
-
       // ------------------------------------------------------
-      // TRACKER
+      // TRACKER TOKEN
       // ------------------------------------------------------
-
-      if (!data.trackerToken) {
-        console.error(
-          '[Safepay] Full response:',
-          data
-        );
-
-        throw new Error(
-          'Backend did not return trackerToken.'
-        );
-      }
-
 
       const trackerToken =
         data.trackerToken;
 
+      if (
+        !trackerToken ||
+        typeof trackerToken !== 'string'
+      ) {
+        console.error(
+          '[Safepay] Missing tracker token:',
+          data
+        );
+
+        throw new Error(
+          'Backend did not return a valid Safepay tracker token.'
+        );
+      }
 
       console.log(
         '[Safepay] Tracker:',
         trackerToken
       );
-
 
       // ------------------------------------------------------
       // CHECKOUT URL
@@ -220,85 +302,162 @@ export default function CreditManager({
         data.url ||
         data.redirect;
 
-
-      if (!checkoutUrl) {
+      if (
+        !checkoutUrl ||
+        typeof checkoutUrl !== 'string'
+      ) {
         console.error(
-          '[Safepay] Backend response:',
+          '[Safepay] Missing checkout URL:',
           data
         );
 
         throw new Error(
-          'Backend created the tracker successfully, but did not return a Safepay checkout URL.'
+          'Backend created the payment but did not return a Safepay checkout URL.'
         );
       }
 
+      // ------------------------------------------------------
+      // BASIC CHECKOUT URL VALIDATION
+      // ------------------------------------------------------
+
+      let parsedCheckoutUrl;
+
+      try {
+        parsedCheckoutUrl =
+          new URL(checkoutUrl);
+      } catch (urlError) {
+        console.error(
+          '[Safepay] Invalid checkout URL:',
+          checkoutUrl
+        );
+
+        throw new Error(
+          'Safepay returned an invalid checkout URL.'
+        );
+      }
+
+      if (
+        parsedCheckoutUrl.protocol !==
+          'https:' &&
+        parsedCheckoutUrl.protocol !==
+          'http:'
+      ) {
+        throw new Error(
+          'Safepay returned an unsupported checkout URL.'
+        );
+      }
 
       console.log(
-        '[Safepay] Checkout URL received'
+        '[Safepay] Checkout URL received.'
       );
-
 
       // ------------------------------------------------------
       // SAVE PAYMENT INFORMATION
       // ------------------------------------------------------
+      //
+      // This information is only used by the frontend
+      // success/cancel flow.
+      //
+      // Payment verification MUST still happen on
+      // the backend.
+      // ------------------------------------------------------
 
-      sessionStorage.setItem(
-        'safepay_tracker',
-        trackerToken
-      );
+      try {
+        sessionStorage.setItem(
+          'safepay_tracker',
+          trackerToken
+        );
 
-      sessionStorage.setItem(
-        'safepay_package',
-        selectedPkg.id
-      );
+        sessionStorage.setItem(
+          'safepay_package',
+          validPackage.id
+        );
 
-      sessionStorage.setItem(
-        'safepay_user',
-        userEmail
-      );
+        sessionStorage.setItem(
+          'safepay_user',
+          normalizedEmail
+        );
 
+        if (data.orderId) {
+          sessionStorage.setItem(
+            'safepay_order_id',
+            String(data.orderId)
+          );
+        }
+      } catch (storageError) {
+        console.warn(
+          '[Safepay] Could not save payment session data:',
+          storageError
+        );
+
+        // Do not stop checkout because sessionStorage
+        // is unavailable.
+      }
+
+      // ------------------------------------------------------
+      // OPTIONAL CALLBACK
+      // ------------------------------------------------------
+
+      if (
+        typeof onCreditsUpdated ===
+        'function'
+      ) {
+        try {
+          onCreditsUpdated({
+            status: 'PAYMENT_STARTED',
+            packageId: validPackage.id,
+            trackerToken,
+          });
+        } catch (callbackError) {
+          console.warn(
+            '[Safepay] onCreditsUpdated callback error:',
+            callbackError
+          );
+        }
+      }
 
       // ------------------------------------------------------
       // REDIRECT TO SAFEPAY
       // ------------------------------------------------------
 
       setPaymentStatus({
-        text: 'Opening Safepay checkout...',
+        text:
+          'Opening Safepay checkout...',
         type: 'info',
       });
 
-
+      // Give React a moment to display the status
+      // before navigating away.
       setTimeout(() => {
-        window.location.href =
-          checkoutUrl;
+        window.location.assign(
+          parsedCheckoutUrl.toString()
+        );
       }, 300);
-
-
-    } catch (err) {
-
+    } catch (error) {
       console.error(
         '[Safepay] Checkout error:',
-        err
+        error
       );
 
       setIsProcessing(false);
 
       setPaymentStatus({
         text:
-          err?.message ||
+          error?.message ||
           'Unable to start Safepay payment.',
         type: 'error',
       });
     }
   };
 
-
   // ==========================================================
   // CLOSE MODAL
   // ==========================================================
 
   const closeModal = () => {
-    if (isProcessing) return;
+    if (isProcessing) {
+      return;
+    }
 
     setIsOpen(false);
 
@@ -308,6 +467,24 @@ export default function CreditManager({
     });
   };
 
+  // ==========================================================
+  // OPEN MODAL
+  // ==========================================================
+
+  const openModal = () => {
+    if (isProcessing) {
+      return;
+    }
+
+    setPaymentStatus({
+      text: '',
+      type: '',
+    });
+
+    setSelectedPkg(PACKAGES[0]);
+
+    setIsOpen(true);
+  };
 
   // ==========================================================
   // UI
@@ -320,27 +497,37 @@ export default function CreditManager({
       ====================================================== */}
 
       <button
-        onClick={() => {
-          setIsOpen(true);
-
-          setPaymentStatus({
-            text: '',
-            type: '',
-          });
+        type="button"
+        onClick={openModal}
+        disabled={isProcessing}
+        style={{
+          ...triggerBtnStyle,
+          opacity: isProcessing ? 0.6 : 1,
+          cursor: isProcessing
+            ? 'not-allowed'
+            : 'pointer',
         }}
-        style={triggerBtnStyle}
       >
         + Buy Credits ⚡
       </button>
-
 
       {/* ======================================================
           MODAL
       ====================================================== */}
 
       {isOpen && (
-        <div style={overlayStyle}>
-
+        <div
+          style={overlayStyle}
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+                event.currentTarget &&
+              !isProcessing
+            ) {
+              closeModal();
+            }
+          }}
+        >
           <div
             style={{
               ...modalStyle,
@@ -348,8 +535,10 @@ export default function CreditManager({
                 ? '16px'
                 : '24px',
             }}
+            onMouseDown={(event) => {
+              event.stopPropagation();
+            }}
           >
-
             {/* ==================================================
                 HEADER
             ================================================== */}
@@ -363,7 +552,6 @@ export default function CreditManager({
                 marginBottom: '16px',
               }}
             >
-
               <h2
                 style={{
                   margin: 0,
@@ -376,17 +564,61 @@ export default function CreditManager({
                 Buy Credits (Safepay)
               </h2>
 
-
               <button
+                type="button"
                 onClick={closeModal}
                 disabled={isProcessing}
-                style={closeBtnStyle}
+                style={{
+                  ...closeBtnStyle,
+                  opacity: isProcessing
+                    ? 0.5
+                    : 1,
+                  cursor: isProcessing
+                    ? 'not-allowed'
+                    : 'pointer',
+                }}
+                aria-label="Close"
               >
                 ✕
               </button>
-
             </div>
 
+            {/* ==================================================
+                USER EMAIL
+            ================================================== */}
+
+            <div
+              style={{
+                marginBottom: '16px',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                background:
+                  'rgba(255,255,255,0.04)',
+                border:
+                  '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <div
+                style={{
+                  color: '#888',
+                  fontSize: '0.72rem',
+                  marginBottom: '3px',
+                }}
+              >
+                Payment account
+              </div>
+
+              <div
+                style={{
+                  color: '#ddd',
+                  fontSize: '0.85rem',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {userEmail ||
+                  'No email available'}
+              </div>
+            </div>
 
             {/* ==================================================
                 PACKAGE SELECTION
@@ -394,15 +626,13 @@ export default function CreditManager({
 
             <h4
               style={{
-                margin:
-                  '0 0 10px 0',
+                margin: '0 0 10px 0',
                 color: '#fff',
                 fontSize: '0.95rem',
               }}
             >
               Select a Package
             </h4>
-
 
             <div
               style={{
@@ -411,30 +641,29 @@ export default function CreditManager({
                   isMobile
                     ? '1fr'
                     : 'repeat(3, 1fr)',
-
                 gap: '10px',
-
                 marginBottom: '20px',
               }}
             >
-
               {PACKAGES.map((pkg) => {
-
                 const isSelected =
-                  selectedPkg.id ===
-                  pkg.id;
+                  selectedPkg.id === pkg.id;
 
                 return (
-
-                  <div
+                  <button
+                    type="button"
                     key={pkg.id}
-
                     onClick={() => {
                       if (!isProcessing) {
                         setSelectedPkg(pkg);
+
+                        setPaymentStatus({
+                          text: '',
+                          type: '',
+                        });
                       }
                     }}
-
+                    disabled={isProcessing}
                     style={{
                       ...packageCardStyle,
 
@@ -450,72 +679,52 @@ export default function CreditManager({
                         ? '0 0 10px rgba(0, 243, 255, 0.2)'
                         : 'none',
 
-                      opacity:
-                        isProcessing
-                          ? 0.6
-                          : 1,
+                      opacity: isProcessing
+                        ? 0.6
+                        : 1,
+
+                      cursor: isProcessing
+                        ? 'not-allowed'
+                        : 'pointer',
                     }}
                   >
-
                     <div
                       style={{
-                        fontSize:
-                          isMobile
-                            ? '0.95rem'
-                            : '1rem',
-
-                        fontWeight:
-                          'bold',
-
-                        color:
-                          '#00f3ff',
+                        fontSize: isMobile
+                          ? '0.95rem'
+                          : '1rem',
+                        fontWeight: 'bold',
+                        color: '#00f3ff',
                       }}
                     >
                       {pkg.label}
                     </div>
 
-
                     <div
                       style={{
-                        fontSize:
-                          '0.85rem',
-
-                        color:
-                          '#aaa',
-
-                        marginTop:
-                          '4px',
+                        fontSize: '0.85rem',
+                        color: '#aaa',
+                        marginTop: '4px',
                       }}
                     >
                       ${pkg.price} USD
                     </div>
-
-                  </div>
+                  </button>
                 );
               })}
-
             </div>
-
 
             {/* ==================================================
                 STATUS
             ================================================== */}
 
             {paymentStatus.text && (
-
               <div
                 style={{
-                  padding:
-                    '10px 12px',
-
-                  borderRadius:
-                    '6px',
-
-                  fontSize:
-                    '0.85rem',
-
-                  marginBottom:
-                    '16px',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px',
 
                   background:
                     paymentStatus.type ===
@@ -535,40 +744,34 @@ export default function CreditManager({
                       ? '1px solid #ff3232'
                       : '1px solid #00f3ff',
 
-                  whiteSpace:
-                    'pre-wrap',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
                 }}
               >
                 {paymentStatus.text}
               </div>
             )}
 
-
             {/* ==================================================
                 CHECKOUT BUTTON
             ================================================== */}
 
             <button
+              type="button"
               onClick={
                 handleSafepayCheckout
               }
-
-              disabled={
-                isProcessing
-              }
-
+              disabled={isProcessing}
               style={{
                 ...checkoutBtnStyle,
 
-                opacity:
-                  isProcessing
-                    ? 0.6
-                    : 1,
+                opacity: isProcessing
+                  ? 0.6
+                  : 1,
 
-                cursor:
-                  isProcessing
-                    ? 'not-allowed'
-                    : 'pointer',
+                cursor: isProcessing
+                  ? 'not-allowed'
+                  : 'pointer',
               }}
             >
               {isProcessing
@@ -576,6 +779,9 @@ export default function CreditManager({
                 : `Pay $${selectedPkg.price} USD via Safepay 💳`}
             </button>
 
+            {/* ==================================================
+                SECURITY MESSAGE
+            ================================================== */}
 
             <div
               style={{
@@ -583,18 +789,18 @@ export default function CreditManager({
                 textAlign: 'center',
                 color: '#777',
                 fontSize: '0.72rem',
+                lineHeight: '1.4',
               }}
             >
-              Secure payment powered by Safepay
+              Secure payment powered by
+              Safepay
             </div>
-
           </div>
         </div>
       )}
     </>
   );
 }
-
 
 // ============================================================
 // STYLES
@@ -604,8 +810,7 @@ const triggerBtnStyle = {
   background:
     'rgba(0, 243, 255, 0.15)',
 
-  color:
-    '#00f3ff',
+  color: '#00f3ff',
 
   border:
     '1px solid #00f3ff',
@@ -628,7 +833,6 @@ const triggerBtnStyle = {
   transition:
     '0.3s',
 };
-
 
 const overlayStyle = {
   position:
@@ -661,7 +865,6 @@ const overlayStyle = {
     '12px',
 };
 
-
 const modalStyle = {
   background:
     '#16161a',
@@ -691,7 +894,6 @@ const modalStyle = {
     '#fff',
 };
 
-
 const closeBtnStyle = {
   background:
     'none',
@@ -707,8 +909,10 @@ const closeBtnStyle = {
 
   cursor:
     'pointer',
-};
 
+  padding:
+    '4px 8px',
+};
 
 const packageCardStyle = {
   borderRadius:
@@ -725,8 +929,13 @@ const packageCardStyle = {
 
   transition:
     'all 0.2s ease-in-out',
-};
 
+  width:
+    '100%',
+
+  fontFamily:
+    'inherit',
+};
 
 const checkoutBtnStyle = {
   width:
