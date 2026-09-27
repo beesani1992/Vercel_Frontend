@@ -122,10 +122,8 @@ export default function CreditManager({
           },
 
           body: JSON.stringify({
-            amount: selectedPkg.price,
-            currency: 'USD',
             packageId: selectedPkg.id,
-            userId: userId,
+            userIdentifier: userId,
           }),
         }
       );
