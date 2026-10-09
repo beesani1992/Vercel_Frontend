@@ -3,6 +3,7 @@ import App from './App';
 import AuthPage from './AuthPage';
 import Profile from './Profile';
 import CreditManager from './CreditManager';
+import PaymentSuccess from './PaymentSuccess.jsx';
 
 const BACKEND_URL =
   'https://vercel-backend-two-umber.vercel.app';
@@ -325,13 +326,23 @@ export default function AppWrapper() {
     await fetchCredits();
   };
 
-  if (!isAuthenticated) {
-    return (
-      <AuthPage
-        onLoginSuccess={handleLoginSuccess}
-      />
-    );
-  }
+// Handle Safepay's return URL before the login check.
+if (window.location.pathname === '/payment/success') {
+  return (
+    <PaymentSuccess
+      onCreditsUpdated={handleCreditsUpdated}
+    />
+  );
+}
+
+// Keep the existing authentication logic.
+if (!isAuthenticated) {
+  return (
+    <AuthPage
+      onLoginSuccess={handleLoginSuccess}
+    />
+  );
+}
 
   return (
     <div
