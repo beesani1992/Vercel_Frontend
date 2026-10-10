@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CopyScriptButton from './components/CopyScriptButton';
-import PaymentDetailsModal from './components/PaymentDetailsModal';
+
 
 // Accept credits and useCredit props passed down from AppWrapper
 function App({ credits, useCredit, userId }) {
@@ -10,9 +10,6 @@ function App({ credits, useCredit, userId }) {
   const [loadingState, setLoadingState] = useState({ active: false, message: '' });
   const [cartoonData, setCartoonData] = useState('');
 
-  // PAYMENT MODAL STATE
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState(null);
 
   // Quick Credit Packages definition
   const creditPackages = [
@@ -21,10 +18,6 @@ function App({ credits, useCredit, userId }) {
     { id: 'pack_1500', credits: 1500, price: 50 },
   ];
 
-  const handleOpenPayment = (pkg) => {
-    setSelectedPackage(pkg);
-    setIsPaymentModalOpen(true);
-  };
 
   const handleVideoSelection = (e) => {
     const file = e.target.files[0];
@@ -174,14 +167,6 @@ function App({ credits, useCredit, userId }) {
           )}
         </section>
       </main>
-
-      {/* MODAL COMPONENT */}
-      <PaymentDetailsModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        selectedPackage={selectedPackage}
-        userId={userId}
-      />
     </div>
   );
 }
