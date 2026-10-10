@@ -94,19 +94,16 @@ function App({ credits, useCredit, userId }) {
               Available Credits: <strong style={{ color: '#4F46E5', fontSize: '1.2rem' }}>{credits ?? 0}</strong>
             </span>
           </div>
-
-          <div style={styles.pkgButtonGroup}>
-            {creditPackages.map((pkg) => (
-              <button
-                key={pkg.id}
-                onClick={() => handleOpenPayment(pkg)}
-                style={styles.paymentDetailsBtn}
-              >
-                📝 Submit Payment Details
-                <span style={styles.priceTag}>${pkg.price} for {pkg.credits} C</span>
-              </button>
-            ))}
-          </div>
+        {/* INSTRUCTION BOX */}
+        <div style={styles.instructionBox}>
+          <h3 style={styles.instructionTitle}>📖 How It Works</h3>
+          <ul style={styles.instructionList}>
+          <li><strong>1. Upload Video:</strong> Drag and drop or browse to select your MP4 video file.</li>
+          <li><strong>2. Video Duration:</strong> Less than 60 Seconds <strong>To reduce Generation Load</strong> of video length. Ensure you have enough credits in your balance.</li>
+          <li><strong>3. Generate Script:</strong> Click "Generate Script" to let the App build your scene-by-scene script.</li>
+          </ul>
+        </div>
+          
         </div>
       </header>
 
