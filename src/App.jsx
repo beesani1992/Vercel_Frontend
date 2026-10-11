@@ -83,8 +83,8 @@ function App({ credits, useCredit, userId }) {
   return (
     <div style={styles.appContainer}>
       <header style={styles.header}>
-        <h1 style={styles.title}>✨ Video-to-Script</h1>
-        <p style={styles.subtitle}>Powered by Google Gemini</p>
+        <h1 style={styles.title}> <img src="/favicon.png" alt="Logo" style={{ width: "80px", height: "80px", verticalAlign: "middle", marginRight: "8px" }}/> Video-to-Script</h1>
+        <p style={styles.subtitle}>Powered by AI</p>
         
         {/* TOP BAR CREDIT COUNTER & BUY CREDITS BUTTONS */}
         <div style={styles.creditsBar}>
