@@ -13,6 +13,13 @@ export default function Profile({ credits }) {
       .then((data) => setUser(data));
   }, []);
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const isoSafeString = dateString.replace(' ', 'T');
+    const parsedDate = new Date(isoSafeString);
+    return isNaN(parsedDate) ? 'N/A' : parsedDate.toLocaleDateString();
+  };
+
   if (!user) return <p style={{ color: '#00f3ff', textAlign: 'center', marginTop: '50px' }}>Loading profile...</p>;
 
   return (
@@ -24,7 +31,7 @@ export default function Profile({ credits }) {
           <p><strong>Username:</strong> {user.username}</p>
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Available Credits:</strong> <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>⚡ {credits ?? user.credits}</span></p>
-          <p><strong>Joined:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
+          <p><strong>Joined:</strong> {formatDate(user.created_at)}</p>
         </div>
       </div>
     </div>
