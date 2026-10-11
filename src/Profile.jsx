@@ -24,7 +24,13 @@ export default function Profile({ credits }) {
           <p><strong>Username:</strong> {user.username}</p>
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Available Credits:</strong> <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>⚡ {credits ?? user.credits}</span></p>
-          <p><strong>Joined:</strong>{" "}{user?.created_at? new Date(user.created_at.replace(" ", "T").replace("+00", "Z")).toLocaleDateString("en-GB"): "Date unavailable"}</p>
+          <p>
+            <strong>Joined:</strong>{" "}
+            {user?.created_at
+              ? new Date(
+                user.created_at.replace(" ", "T").replace("+00", "Z")
+              ).toLocaleDateString("en-GB")
+            : "Date unavailable"}</p>
         </div>
       </div>
     </div>
