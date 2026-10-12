@@ -1,331 +1,198 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import CopyScriptButton from './components/CopyScriptButton';
-import './App.css';
 
+
+// Accept credits and useCredit props passed down from AppWrapper
 function App({ credits, useCredit, userId }) {
   const [videoFile, setVideoFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState('');
-  const [videoDuration, setVideoDuration] = useState(0);
-  const [loadingState, setLoadingState] = useState({
-    active: false,
-    message: '',
-  });
+  const [videoDuration, setVideoDuration] = useState(0); // Holds video length in seconds
+  const [loadingState, setLoadingState] = useState({ active: false, message: '' });
   const [cartoonData, setCartoonData] = useState('');
 
-  useEffect(() => {
-    return () => {
-      if (videoPreview) URL.revokeObjectURL(videoPreview);
-    };
-  }, [videoPreview]);
+
+  // Quick Credit Packages definition
+  const creditPackages = [
+    { id: 'pack_100', credits: 100, price: 5 },
+    { id: 'pack_500', credits: 500, price: 20 },
+    { id: 'pack_1500', credits: 1500, price: 50 },
+  ];
+
 
   const handleVideoSelection = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('video/')) {
-      alert('Please select a valid video file.');
-      e.target.value = '';
-      return;
+    const file = e.target.files[0];
+    if (file) {
+      setVideoFile(file);
+      setVideoPreview(URL.createObjectURL(file));
+      setCartoonData('');
     }
-
-    setVideoFile(file);
-    setVideoPreview(URL.createObjectURL(file));
-    setVideoDuration(0);
-    setCartoonData('');
   };
 
+  // Automatically captures the video duration when metadata loads
   const handleLoadedMetadata = (e) => {
-    const duration = e.currentTarget.duration;
-
-    if (Number.isFinite(duration) && duration > 0) {
-      setVideoDuration(Math.ceil(duration));
-    } else {
-      setVideoDuration(0);
-    }
+    const durationInSeconds = Math.ceil(e.target.duration);
+    setVideoDuration(durationInSeconds);
   };
 
   const startTransformation = async () => {
-    if (!videoFile) {
-      alert('Select an MP4/MOV video first.');
-      return;
-    }
+    if (!videoFile) return alert('Select an MP4/MOV video first.');
 
-    if (!videoDuration) {
-      alert('Please wait until the video duration has loaded.');
-      return;
-    }
-
-    if (videoDuration >= 60) {
-      alert('Please select a video shorter than 60 seconds.');
-      return;
-    }
-
+    // 1. Calculate required credits: 5 credits per second
     const requiredCredits = videoDuration * 5;
-    const availableCredits = Number(credits ?? 0);
 
-    if (availableCredits < requiredCredits) {
-      alert(
-        `Insufficient credits! This ${videoDuration}-second video requires ` +
-        `${requiredCredits} credits. You currently have ${availableCredits} credits.`
+    // 2. Pre-check if user has enough credits
+    if (credits < requiredCredits) {
+      return alert(
+        `Insufficient credits! This ${videoDuration}-second video requires ${requiredCredits} credits (5 credits/sec). You currently have ${credits} credits.`
       );
-      return;
     }
 
     const payload = new FormData();
     payload.append('video', videoFile);
 
-    setLoadingState({
-      active: true,
-      message: 'Uploading video and generating your script...',
-    });
+    setLoadingState({ active: true, message: 'Uploading video & generating script via Gemini engine...' });
 
     try {
-      const response = await fetch(
-        'https://vercel-backend-two-umber.vercel.app/api/process-video',
-        {
-          method: 'POST',
-          body: payload,
-        }
-      );
+      const response = await fetch('https://vercel-backend-two-umber.vercel.app/api/process-video', {
+        method: 'POST',
+        body: payload,
+      });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Video processing failed.');
+      if (data.success) {
+        setLoadingState({ active: true, message: `Script generated! Finalizing deduction of ${requiredCredits} credits...` });
+        
+        const success = await useCredit(requiredCredits);
+
+        if (!success) {
+          throw new Error('Credit deduction failed. Please contact support.');
+        }
+
+        setCartoonData(data.cartoonBlueprint);
+        setLoadingState({ active: false, message: '' });
+      } else {
+        throw new Error(data.error || 'Pipeline breakdown.');
       }
-
-      if (!data.cartoonBlueprint) {
-        throw new Error('The server returned an empty script.');
-      }
-
-      setLoadingState({
-        active: true,
-        message: `Script generated. Deducting ${requiredCredits} credits...`,
-      });
-
-      const success = await useCredit(requiredCredits);
-
-      if (!success) {
-        throw new Error(
-          'Credit deduction failed. Please contact support before retrying.'
-        );
-      }
-
-      setCartoonData(data.cartoonBlueprint);
     } catch (err) {
       alert(`Error: ${err.message}`);
-    } finally {
       setLoadingState({ active: false, message: '' });
     }
   };
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <div className="brand">
-          <img
-            src="/favicon.png"
-            alt="Video-to-Script logo"
-            className="app-logo"
-          />
-          <h1 className="app-title">Video-to-Script</h1>
-        </div>
-
-        <p className="app-subtitle">
-          Turn your videos into AI-powered scripts
-        </p>
-
-        <span className="powered-badge">✦ Powered by AI</span>
-
-        <div className="credits-bar">
-          <div className="credit-info-box">
-            <span className="credit-icon">💳</span>
-            <div className="credit-info">
-              <span className="credit-label">Available Credits</span>
-              <strong className="credit-count">
-                {credits ?? 0}
-              </strong>
-            </div>
+    <div style={styles.appContainer}>
+      <header style={styles.header}>
+        <h1 style={styles.title}> <img src="/favicon.png" alt="Logo" style={{ width: "80px", height: "80px", verticalAlign: "middle", marginRight: "8px" }}/> Video-to-Script</h1>
+        <p style={styles.subtitle}>Powered by AI</p>
+        
+        {/* TOP BAR CREDIT COUNTER & BUY CREDITS BUTTONS */}
+        <div style={styles.creditsBar}>
+          <div style={styles.creditInfoBox}>
+            <span style={{ fontSize: '1.2rem' }}>💳</span>
+            <span style={styles.creditText}>
+              Available Credits: <strong style={{ color: '#4F46E5', fontSize: '1.2rem' }}>{credits ?? 0}</strong>
+            </span>
           </div>
-
-          <div className="credit-rate">
-            <span>5 credits</span>
-            <span className="rate-divider">/</span>
-            <span>second of video</span>
-          </div>
+        {/* INSTRUCTION BOX */}
+        <div style={styles.instructionBox}>
+          <h3 style={styles.instructionTitle}>📖 How It Works</h3>
+          <ul style={styles.instructionList}>
+          <li><strong>1. Upload Video:</strong> Drag and drop or browse to select your MP4 video file.</li>
+          <li><strong>2. Video Duration:</strong> Less than 60 Seconds <strong>To reduce Generation Load</strong> of video length. Ensure you have enough credits in your balance.</li>
+          <li><strong>3. Generate Script:</strong> Click "Generate Script" to let the App build your scene-by-scene script.</li>
+          </ul>
         </div>
-
-        <section className="instruction-box">
-          <h2 className="instruction-title">📖 How It Works</h2>
-
-          <ol className="instruction-list">
-            <li>
-              <strong>Upload Video</strong>
-              <span>
-                Select an MP4, MOV, or other supported video file.
-              </span>
-            </li>
-            <li>
-              <strong>Check Duration</strong>
-              <span>
-                Videos must be shorter than 60 seconds. Each second costs
-                5 credits.
-              </span>
-            </li>
-            <li>
-              <strong>Generate Script</strong>
-              <span>
-                Generate your scene-by-scene script using AI.
-              </span>
-            </li>
-          </ol>
-        </section>
+          
+        </div>
       </header>
 
-      <main className="main-grid">
-        <section className="dashboard-card">
-          <div className="card-heading">
-            <span className="step-number">01</span>
-            <div>
-              <h2 className="card-title">Upload Video Source</h2>
-              <p className="card-description">
-                Select a video to begin.
-              </p>
-            </div>
+      <main style={styles.mainGrid}>
+        {/* Left Column: Upload and Input Preview */}
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>Step-1. Upload Video Source</h2>
+          <div style={styles.dropZone}>
+            <input type="file" accept="video/*" onChange={handleVideoSelection} style={styles.fileInput} />
+            <p>Drag video here or click to browse</p>
           </div>
 
-          <label className="drop-zone">
-            <input
-              type="file"
-              accept="video/*"
-              onChange={handleVideoSelection}
-              className="file-input"
-              disabled={loadingState.active}
-            />
-
-            <span className="upload-icon">↑</span>
-            <span className="upload-title">
-              {videoFile ? 'Choose another video' : 'Select your video'}
-            </span>
-            <span className="upload-description">
-              Click to browse your files
-            </span>
-            <span className="file-formats">
-              MP4 · MOV · Under 60 seconds
-            </span>
-          </label>
-
-          {videoFile && (
-            <div className="selected-file">
-              <span className="file-icon">▶</span>
-              <div className="file-details">
-                <span className="file-name">{videoFile.name}</span>
-                <span className="file-size">
-                  {(videoFile.size / (1024 * 1024)).toFixed(2)} MB
-                </span>
-              </div>
-            </div>
-          )}
-
           {videoPreview && (
-            <div className="preview-container">
-              <h3 className="section-label">Source Preview</h3>
-
-              <video
-                src={videoPreview}
-                controls
-                playsInline
-                preload="metadata"
+            <div style={styles.previewContainer}>
+              <h3 style={styles.label}>Source Preview:</h3>
+              <video 
+                src={videoPreview} 
+                controls 
                 onLoadedMetadata={handleLoadedMetadata}
-                className="video-player"
+                style={styles.videoPlayer} 
               />
-
               {videoDuration > 0 && (
-                <div className="video-cost">
-                  <span>Duration: {videoDuration} sec</span>
-                  <span>
-                    Estimated cost: {videoDuration * 5} credits
-                  </span>
-                </div>
-              )}
-
-              {videoDuration >= 60 && (
-                <p className="validation-message">
-                  Please choose a video shorter than 60 seconds.
+                <p style={{ marginTop: '10px', fontSize: '0.9rem', color: '#4F46E5', fontWeight: '600' }}>
+                  ⏱️ Length: {videoDuration} seconds | ⚡ Cost: {videoDuration * 5} Credits
                 </p>
               )}
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={startTransformation}
-            disabled={
-              loadingState.active ||
-              !videoFile ||
-              !videoDuration ||
-              videoDuration >= 60
-            }
-            className="action-button"
+          <button 
+            onClick={startTransformation} 
+            disabled={loadingState.active || !videoFile}
+            style={{...styles.actionBtn, opacity: (loadingState.active || !videoFile) ? 0.6 : 1}}
           >
-            {loadingState.active ? (
-              <>
-                <span className="spinner" />
-                Processing Video...
-              </>
-            ) : (
-              '✦ Generate Script'
-            )}
+            {loadingState.active ? 'Processing Architecture...' : 'Generate Script'}
           </button>
-
-          {loadingState.active && (
-            <p className="loading-text" role="status">
-              {loadingState.message}
-            </p>
-          )}
+          
+          {loadingState.active && <p style={styles.loadingText}>⏳ {loadingState.message}</p>}
         </section>
 
-        <section className="dashboard-card output-card">
-          <div className="card-heading output-heading">
-            <span className="step-number">02</span>
-
-            <div className="output-heading-text">
-              <h2 className="card-title">Target Script Generation</h2>
-              <p className="card-description">
-                Your generated script appears here.
-              </p>
-            </div>
-
-            <div className="copy-button-wrapper">
-              <CopyScriptButton textToCopy={cartoonData} />
-            </div>
+        {/* Right Column: Cartoon Blueprint Output */}
+        <section style={styles.card}>
+          {/* Header flexbox containing Title and Copy Component */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #F3F4F6', paddingBottom: '10px' }}>
+            <h2 style={{ ...styles.cardTitle, borderBottom: 'none', paddingBottom: 0, margin: 0 }}>Step-2. Target Script Generation</h2>
+            
+            {/* COPY BUTTON COMPONENT */}
+            <CopyScriptButton textToCopy={cartoonData} />
           </div>
-
           {cartoonData ? (
-            <div className="output-box">
-              <pre className="preformatted-text">{cartoonData}</pre>
+            <div style={styles.outputBox}>
+              <pre style={styles.preformattedText}>{cartoonData}</pre>
             </div>
           ) : (
-            <div className="placeholder-box">
-              <span className="placeholder-icon">✧</span>
-              <h3>Your script will appear here</h3>
-              <p>
-                Upload a video and generate your AI-powered artistic
-                interpretation and keyframe prompts.
-              </p>
-              <span className="waiting-badge">
-                Awaiting video processing
-              </span>
+            <div style={styles.placeholderBox}>
+              <p>Your AI-generated artistic interpretation and keyframe prompts will populate here.</p>
             </div>
           )}
         </section>
       </main>
-
-      <footer className="app-footer">
-        Video-to-Script <span>·</span> AI-powered video workflow
-      </footer>
     </div>
   );
 }
+
+// Fixed Dashboard Styling Rules
+const styles = {
+  appContainer: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px', fontFamily: '"Inter", sans-serif', color: '#1F2937' },
+  header: { textAlign: 'center', marginBottom: '32px' },
+  title: { fontSize: '2.5rem', fontWeight: '800', color: '#4F46E5', margin: '0 0 8px 0' },
+  subtitle: { fontSize: '1.1rem', color: '#6B7280', margin: '0 0 24px 0' },
+  creditsBar: { background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px 24px', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+  creditInfoBox: { display: 'flex', alignItems: 'center', gap: '8px' },
+  creditText: { margin: 0, fontSize: '1rem', color: '#334155', fontWeight: '500' },
+  instructionBox: { background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', padding: '20px 24px', margin: '24px auto', maxWidth: '800px', textAlign: 'left', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',},
+  instructionTitle: { margin: '0 0 10px 0', fontSize: '1.1rem', color: '#166534', fontWeight: '700',},
+  instructionList: { margin: 0, paddingLeft: '20px', color: '#15803D', fontSize: '0.95rem', lineHeight: '1.6',},
+  mainGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', alignItems: 'start' },
+  card: { background: '#FFFFFF', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
+  cardTitle: { fontSize: '1.3rem', fontWeight: '700', marginBottom: '20px', borderBottom: '2px solid #F3F4F6', paddingBottom: '10px' },
+  dropZone: { border: '2px dashed #64748B', borderRadius: '8px', padding: '30px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC', position: 'relative' },
+  fileInput: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' },
+  previewContainer: { marginTop: '20px' },
+  label: { fontSize: '0.9rem', fontWeight: '600', color: '#4B5563' },
+  videoPlayer: { width: '100%', borderRadius: '6px', marginTop: '5px' },
+  actionBtn: { width: '100%', padding: '14px', background: '#4F46E5', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', marginTop: '20px', transition: 'all 0.2s' },
+  loadingText: { color: '#4F46E5', textAlign: 'center', fontWeight: '500', marginTop: '10px' },
+  outputBox: { background: '#0F172A', color: '#38BDF8', padding: '20px', borderRadius: '8px', overflowX: 'auto', maxHeight: '500px' },
+  preformattedText: { whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'monospace', fontSize: '0.95rem', lineHeight: '1.5' },
+  placeholderBox: { border: '2px dashed #E5E7EB', borderRadius: '8px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', textAlign: 'center', color: '#9CA3AF' }
+};
 
 export default App;
