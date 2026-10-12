@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import CopyScriptButton from './components/CopyScriptButton';
 import './App.css';
